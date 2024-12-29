@@ -17,3 +17,18 @@ impl From<web::Json<CreateUserReq>> for CreateUserReq {
         }
     }
 }
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct LoginUserReq {
+    pub email: String,
+    pub password: String,
+}
+
+impl From<web::Json<LoginUserReq>> for LoginUserReq {
+    fn from(u: web::Json<LoginUserReq>) -> Self {
+        LoginUserReq {
+            email: u.email.clone(),
+            password: u.password.clone(),
+        }
+    }
+}
