@@ -8,7 +8,7 @@ use actix_web::{
         StatusCode,
     },
     web::Data,
-    Error, HttpResponse,
+    Error, HttpMessage, HttpResponse,
 };
 
 use futures_util::{future::LocalBoxFuture, FutureExt};
@@ -98,8 +98,7 @@ where
             }
         };
 
-        println!("AQUI: {}", claims.sub);
-
+        req.extensions_mut().insert(claims);
         let fut = self.service.call(req);
 
         Box::pin(async move {

@@ -56,6 +56,7 @@ async fn main() -> io::Result<()> {
             .wrap(Compress::default())
             .configure(routes::auth_routes)
             .configure(routes::token_routes)
+            .configure(routes::misc_routes)
     };
 
     HttpServer::new(app)

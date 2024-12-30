@@ -1,19 +1,55 @@
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
 
 use crate::controllers::auth::*;
-use crate::jwt::generate_token;
+use crate::jwt::{generate_token, TokenClaims};
 use crate::request_types::auth::{CreateUserReq, LoginUserReq};
 use crate::state;
 
 pub async fn refresh_token(
-    _req: HttpRequest,
-    _app_state: web::Data<state::AppState>,
+    req: HttpRequest,
+    app_state: web::Data<state::AppState>,
 ) -> HttpResponse {
-    HttpResponse::Ok().into()
+    let ext = req.extensions();
+    let claims = match ext.get::<TokenClaims>() {
+        Some(c) => c,
+        None => {
+            log::error!("Could not retrieve claims from request object.");
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+                .insert_header(ContentType::json())
+                .body(json!({"success": false, "message": "internal server error"}).to_string());
+        }
+    };
+
+    let now: DateTime<Utc> = Utc::now().into();
+    let access_token_exp = now + Duration::minutes(15);
+
+    let access_token = match generate_token(
+        claims.sub.as_str(),
+        &app_state.jwt_encoding_key,
+        access_token_exp,
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            log::error!("An error occurred while generating access_token: {}", e);
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+                .insert_header(ContentType::json())
+                .body(json!({"success": false, "message": "internal server error"}).to_string());
+        }
+    };
+
+    HttpResponse::build(StatusCode::OK)
+        .insert_header(ContentType::json())
+        .body(
+            json!({
+            "success": true,
+            "access_token": access_token,
+            "access_token_exp": format!("{}", access_token_exp.format("%+")) })
+            .to_string(),
+        )
 }
 
 pub async fn login_user(
