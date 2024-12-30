@@ -1,16 +1,16 @@
 use chrono::{DateTime, Utc};
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-struct TokenClaims {
-    exp: usize,
-    sub: String,
-    iat: usize,
+pub struct TokenClaims {
+    pub exp: usize,
+    pub sub: String,
+    pub iat: usize,
 }
 
 pub fn generate_token(
-    user_email: &str,
+    subject: &str,
     private_key: &EncodingKey,
     expires_at: DateTime<Utc>,
 ) -> Result<String, jsonwebtoken::errors::Error> {
@@ -19,7 +19,7 @@ pub fn generate_token(
     let exp = expires_at.timestamp() as usize;
     let claims = TokenClaims {
         exp,
-        sub: String::from(user_email),
+        sub: String::from(subject),
         iat,
     };
 
@@ -29,4 +29,14 @@ pub fn generate_token(
     let token = encode(&header, &claims, private_key)?;
 
     Ok(token)
+}
+
+pub fn verify_token(
+    token: &str,
+    decoding_key: &DecodingKey,
+) -> Result<TokenClaims, jsonwebtoken::errors::Error> {
+    let token_message =
+        decode::<TokenClaims>(token, decoding_key, &Validation::new(Algorithm::RS256))?;
+
+    Ok(token_message.claims)
 }

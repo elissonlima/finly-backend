@@ -2,11 +2,13 @@ mod controllers;
 mod database;
 mod handlers;
 mod jwt;
+mod middleware;
 mod model;
 mod request_types;
 mod routes;
 mod state;
 
+use actix_web::middleware::{Compress, Logger};
 use actix_web::{web, App, HttpServer};
 use jsonwebtoken::DecodingKey;
 use jsonwebtoken::EncodingKey;
@@ -50,7 +52,15 @@ async fn main() -> io::Result<()> {
     let app = move || {
         App::new()
             .app_data(shared_data.clone())
+            .wrap(Logger::default())
+            .wrap(Compress::default())
             .configure(routes::auth_routes)
+            .configure(routes::token_routes)
     };
-    HttpServer::new(app).bind("127.0.0.1:3000")?.run().await
+
+    HttpServer::new(app)
+        .bind("127.0.0.1:3000")?
+        .workers(4)
+        .run()
+        .await
 }

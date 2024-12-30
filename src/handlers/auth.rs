@@ -1,13 +1,20 @@
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
 
 use crate::controllers::auth::*;
 use crate::jwt::generate_token;
 use crate::request_types::auth::{CreateUserReq, LoginUserReq};
-use crate::{jwt, state};
+use crate::state;
+
+pub async fn refresh_token(
+    _req: HttpRequest,
+    _app_state: web::Data<state::AppState>,
+) -> HttpResponse {
+    HttpResponse::Ok().into()
+}
 
 pub async fn login_user(
     req: web::Json<LoginUserReq>,
@@ -60,7 +67,7 @@ pub async fn login_user(
     let now: DateTime<Utc> = Utc::now().into();
     let access_token_exp = now + Duration::minutes(15);
     let access_token = match generate_token(
-        db_user.email.as_str(),
+        db_user.email.clone().as_str(),
         &app_state.jwt_encoding_key,
         access_token_exp,
     ) {
@@ -75,9 +82,9 @@ pub async fn login_user(
 
     let refresh_token_exp = now + Duration::days(1);
     let refresh_token = match generate_token(
-        db_user.email.as_str(),
+        db_user.email.clone().as_str(),
         &app_state.jwt_encoding_key,
-        refresh_token_exp,
+        refresh_token_exp.clone(),
     ) {
         Ok(a) => a,
         Err(e) => {
@@ -88,31 +95,25 @@ pub async fn login_user(
         }
     };
 
-    let _ = match create_session(
-        db_user.email.as_str(),
-        refresh_token.as_str(),
-        refresh_token_exp,
-        &mut *con,
-    )
-    .await
-    {
-        Ok(_) => (),
-        Err(e) => {
-            log::error!(
-                "An error occurred while inserting session on the database: {}",
-                e
-            );
-            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-                .insert_header(ContentType::json())
-                .body(json!({"success": false, "message": "internal server error"}).to_string());
-        }
-    };
-
     return HttpResponse::build(StatusCode::OK)
         .insert_header(ContentType::json())
         .body(
-            json!({"access_token": access_token, "refresh_token": refresh_token, "success": true})
-                .to_string(),
+            json!({
+                "user": {
+                    "id": db_user.id,
+                    "name": db_user.name,
+                    "email": db_user.email,
+                    "created_at": db_user.created_at,
+                    "auth_type": db_user.auth_type,
+                    "is_email_verified": db_user.is_email_verified,
+                    "is_premium": db_user.is_premium
+                },
+                "access_token": access_token,
+                "access_token_exp": format!("{}", access_token_exp.format("%+")),
+                "refresh_token": refresh_token,
+                "refresh_token_exp":format!("{}", refresh_token_exp.format("%+")),
+                "success": true})
+            .to_string(),
         );
 }
 
@@ -152,7 +153,7 @@ pub async fn post_new_user(
             .body(json!({"success": false, "message": "email already exists"}).to_string());
     }
 
-    let u = match create_user(&mut *con, new_user.into()).await {
+    let _ = match create_user(&mut *con, new_user.into()).await {
         Ok(u) => u,
         Err(e) => {
             log::error!(
@@ -164,7 +165,6 @@ pub async fn post_new_user(
                 .body(json!({"success": false, "message": "internal server error"}).to_string());
         }
     };
-    log::info!("User created! {}", u.id);
 
     return HttpResponse::build(StatusCode::OK)
         .insert_header(ContentType::json())

@@ -11,10 +11,3 @@ CREATE TABLE user (
     is_premium INTEGER NOT NULL -- 0 for false 1 for true
 );
 
-CREATE TABLE session (
-    id INTEGER PRIMARY KEY,
-    user_email TEXT NOT NULL,
-    refresh_token TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL
-);

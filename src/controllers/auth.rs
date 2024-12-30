@@ -2,35 +2,6 @@ use crate::model::user::User;
 use crate::request_types::auth::CreateUserReq;
 use chrono::prelude::{DateTime, Utc};
 
-pub async fn create_session<'a, T>(
-    email: &str,
-    refresh_token: &str,
-    expires_at: DateTime<Utc>,
-    con: T,
-) -> Result<(), sqlx::error::Error>
-where
-    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
-{
-    let utc_now: DateTime<Utc> = Utc::now().into();
-    let created_at = format!("{}", utc_now.format("%+"));
-    let exp_fmt = format!("{}", expires_at.format("%+"));
-
-    let _ = sqlx::query!(
-        r#"
-        INSERT INTO session (user_email, refresh_token, created_at, expires_at)
-        VALUES ($1, $2, $3, $4);
-    "#,
-        email,
-        refresh_token,
-        created_at,
-        exp_fmt
-    )
-    .execute(con)
-    .await?;
-
-    Ok(())
-}
-
 pub async fn get_user<'a, T>(email: &str, con: T) -> Result<User, sqlx::error::Error>
 where
     T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
