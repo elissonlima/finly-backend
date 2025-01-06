@@ -202,11 +202,12 @@ pub async fn post_new_user(
         }
     };
 
-    return HttpResponse::build(StatusCode::OK)
+    return HttpResponse::build(StatusCode::CREATED)
         .insert_header(ContentType::json())
         .body(
             json!({
-                "success": true
+                "success": true,
+                "message": "user created"
             })
             .to_string(),
         );

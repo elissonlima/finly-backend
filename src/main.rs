@@ -12,6 +12,7 @@ use actix_web::middleware::{Compress, Logger};
 use actix_web::{web, App, HttpServer};
 use jsonwebtoken::DecodingKey;
 use jsonwebtoken::EncodingKey;
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use state::AppState;
 use std::env;
 use std::fs;
@@ -27,6 +28,8 @@ async fn main() -> io::Result<()> {
         env::var("JWT_ENC_PATH").expect("JWT_ENC_PATH is not set in .env file");
     let jwt_decoding_key_path =
         env::var("JWT_DEC_PATH").expect("JWT_DEC_PATH is not set in .env file");
+    let tls_key_path = env::var("TLS_KEY_PATH").expect("TLS_KEY_PATH is not set");
+    let tls_cert_path = env::var("TLS_CERT_PATH").expect("TLS_CERT_PATH is not set");
 
     // Setting Log configuration
     let env = env_logger::Env::default()
@@ -49,6 +52,15 @@ async fn main() -> io::Result<()> {
         jwt_decoding_key: jwt_dec_key,
     });
 
+    // load TLS keys
+    let mut ssl_builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+    ssl_builder
+        .set_private_key_file(tls_key_path, SslFiletype::PEM)
+        .unwrap();
+    ssl_builder
+        .set_certificate_chain_file(tls_cert_path)
+        .unwrap();
+
     let app = move || {
         App::new()
             .app_data(shared_data.clone())
@@ -60,7 +72,7 @@ async fn main() -> io::Result<()> {
     };
 
     HttpServer::new(app)
-        .bind("127.0.0.1:3000")?
+        .bind_openssl("0.0.0.0:9000", ssl_builder)?
         .workers(4)
         .run()
         .await
