@@ -1,0 +1,16 @@
+name: finly-backend
+services:
+  finly:
+    build: .
+    ports:
+      - 3000:3000
+    volumes:
+      - ./.db:/database
+      - ~/code/ssl:/ssl
+    environment:
+      - DATABASE_URL=sqlite:///database/main.db
+      - JWT_ENC_PATH=/ssl/jwt.pem
+      - JWT_DEC_PATH=/ssl/jwt.pub
+      - TLS_KEY_PATH=/ssl/priv.key
+      - TLS_CERT_PATH=/ssl/certificate.crt
+

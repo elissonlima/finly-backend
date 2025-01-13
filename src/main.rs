@@ -23,7 +23,6 @@ async fn main() -> io::Result<()> {
     dotenv::dotenv().ok();
 
     let database_path = env::var("DATABASE_URL").expect("DATABASE_URL is not set in .env file");
-    let ddl_script_path = env::var("DDL_PATH").expect("DDL_PATH is not set in .env file");
     let jwt_encoding_key_path =
         env::var("JWT_ENC_PATH").expect("JWT_ENC_PATH is not set in .env file");
     let jwt_decoding_key_path =
@@ -38,7 +37,7 @@ async fn main() -> io::Result<()> {
 
     env_logger::init_from_env(env);
 
-    let db = database::DbConnection::build(database_path.as_str(), ddl_script_path.as_str()).await;
+    let db = database::DbConnection::build(database_path.as_str()).await;
     log::info!("Started connection pool with database");
 
     let jwt_enc_key_fs = fs::read(jwt_encoding_key_path).unwrap();
@@ -72,7 +71,7 @@ async fn main() -> io::Result<()> {
     };
 
     HttpServer::new(app)
-        .bind_openssl("0.0.0.0:9000", ssl_builder)?
+        .bind_openssl("0.0.0.0:3000", ssl_builder)?
         .workers(4)
         .run()
         .await
