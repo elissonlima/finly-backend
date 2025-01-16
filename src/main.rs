@@ -29,6 +29,8 @@ async fn main() -> io::Result<()> {
         env::var("JWT_DEC_PATH").expect("JWT_DEC_PATH is not set in .env file");
     let tls_key_path = env::var("TLS_KEY_PATH").expect("TLS_KEY_PATH is not set");
     let tls_cert_path = env::var("TLS_CERT_PATH").expect("TLS_CERT_PATH is not set");
+    let session_db_ddl_script_path =
+        env::var("SESSION_DB_DDL_SCRIPT_PATH").expect("SESSION_DB_DDL_SCRIPT_PATH is not set");
 
     // Setting Log configuration
     let env = env_logger::Env::default()
@@ -37,7 +39,11 @@ async fn main() -> io::Result<()> {
 
     env_logger::init_from_env(env);
 
+    log::info!("Starting server");
+
     let db = database::DbConnection::build(database_path.as_str()).await;
+    let session_db =
+        database::DbConnection::build_in_memory(session_db_ddl_script_path.as_str()).await;
     log::info!("Started connection pool with database");
 
     let jwt_enc_key_fs = fs::read(jwt_encoding_key_path).unwrap();
@@ -47,6 +53,7 @@ async fn main() -> io::Result<()> {
 
     let shared_data = web::Data::new(AppState {
         db: db.pool,
+        session_db: session_db.pool,
         jwt_encoding_key: jwt_enc_key,
         jwt_decoding_key: jwt_dec_key,
     });
@@ -68,6 +75,7 @@ async fn main() -> io::Result<()> {
             .configure(routes::auth_routes)
             .configure(routes::token_routes)
             .configure(routes::misc_routes)
+            .configure(routes::html_routes)
     };
 
     HttpServer::new(app)

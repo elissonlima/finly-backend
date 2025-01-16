@@ -1,8 +1,8 @@
-use actix_web::web;
+use actix_web::{middleware::from_fn, web};
 
 use crate::{
-    handlers::{auth::*, misc::ping},
-    middleware::Authentication,
+    handlers::{auth::*, html::terms_of_use, misc::ping},
+    middleware::{auth_middleware, refresh_token_middleware},
 };
 
 pub fn auth_routes(cfg: &mut web::ServiceConfig) {
@@ -16,7 +16,7 @@ pub fn auth_routes(cfg: &mut web::ServiceConfig) {
 pub fn token_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/token")
-            .wrap(Authentication)
+            .wrap(from_fn(refresh_token_middleware))
             .route("/refresh", web::post().to(refresh_token)),
     );
 }
@@ -24,7 +24,11 @@ pub fn token_routes(cfg: &mut web::ServiceConfig) {
 pub fn misc_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/ping")
-            .wrap(Authentication)
+            .wrap(from_fn(auth_middleware))
             .route("", web::get().to(ping)),
     );
+}
+
+pub fn html_routes(cfg: &mut web::ServiceConfig) {
+    cfg.service(web::scope("/html").route("/terms", web::get().to(terms_of_use)));
 }

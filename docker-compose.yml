@@ -5,12 +5,15 @@ services:
     ports:
       - 3000:3000
     volumes:
-      - ./.db:/database
-      - ~/code/ssl:/ssl
+      - ./.db:/app/database
+      - ~/code/ssl:/app/ssl
+      - ./html:/app/html
+      - ./migrations:/app/sql
     environment:
-      - DATABASE_URL=sqlite:///database/main.db
-      - JWT_ENC_PATH=/ssl/jwt.pem
-      - JWT_DEC_PATH=/ssl/jwt.pub
-      - TLS_KEY_PATH=/ssl/priv.key
-      - TLS_CERT_PATH=/ssl/certificate.crt
+      - DATABASE_URL=sqlite:///app/database/main.db
+      - JWT_ENC_PATH=/app/ssl/jwt.pem
+      - JWT_DEC_PATH=/app/ssl/jwt.pub
+      - TLS_KEY_PATH=/app/ssl/priv.key
+      - TLS_CERT_PATH=/app/ssl/certificate.crt
+      - SESSION_DB_DDL_SCRIPT_PATH=/app/sql/init_session_db.sql
 

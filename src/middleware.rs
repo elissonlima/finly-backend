@@ -1,109 +1,134 @@
-use std::future::{ready, Ready};
-
 use actix_web::{
-    body::EitherBody,
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    http::{
-        header::{ContentType, AUTHORIZATION},
-        StatusCode,
-    },
+    body::MessageBody,
+    dev::{ServiceRequest, ServiceResponse},
+    http::header::AUTHORIZATION,
+    middleware::Next,
     web::Data,
-    Error, HttpMessage, HttpResponse,
+    Error, HttpMessage,
 };
 
-use futures_util::{future::LocalBoxFuture, FutureExt};
 use serde_json::json;
 
-use crate::{jwt::verify_token, state::AppState};
+use crate::{controllers::auth::get_session_by_session_id, jwt::verify_token, state::AppState};
 
-pub struct Authentication;
-
-impl<S, B> Transform<S, ServiceRequest> for Authentication
-where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
-    S::Future: 'static,
-    B: 'static,
-{
-    type Response = ServiceResponse<EitherBody<B>>;
-    type Error = Error;
-    type InitError = ();
-    type Transform = AuthenticationMiddleware<S>;
-    type Future = Ready<Result<Self::Transform, Self::InitError>>;
-
-    fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(AuthenticationMiddleware { service }))
+pub async fn refresh_token_middleware(
+    req: ServiceRequest,
+    next: Next<impl MessageBody>,
+) -> Result<ServiceResponse<impl MessageBody>, Error> {
+    let auth = req.headers().get(AUTHORIZATION);
+    if auth.is_none() {
+        return Err(actix_web::error::ErrorUnauthorized(
+            json!({"success": false, "message": "unauthorized"}).to_string(),
+        ));
     }
+
+    let token_h = auth.and_then(|t| t.to_str().ok()).unwrap_or_default();
+    let token_s: Vec<&str> = token_h.split_whitespace().collect();
+    let mut token = "";
+
+    if token_s.len() > 1 {
+        token = token_s[1];
+    }
+
+    let app_data = match req.app_data::<Data<AppState>>() {
+        Some(e) => e,
+        None => {
+            log::error!("Error trying to access app state from middleware.");
+            return Err(actix_web::error::ErrorInternalServerError(
+                json!({"success": false, "message": "internal server error"}).to_string(),
+            ));
+        }
+    };
+
+    let claims = match verify_token(token, &app_data.jwt_decoding_key) {
+        Ok(c) => c,
+        Err(e) => {
+            log::error!("Error trying to verify the token: {}", e);
+            return Err(actix_web::error::ErrorUnauthorized(
+                json!({"success": false, "message": "unauthorized"}).to_string(),
+            ));
+        }
+    };
+
+    req.extensions_mut().insert(claims);
+
+    next.call(req).await
 }
 
-pub struct AuthenticationMiddleware<S> {
-    service: S,
-}
-
-impl<S, B> Service<ServiceRequest> for AuthenticationMiddleware<S>
-where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
-    S::Future: 'static,
-    B: 'static,
-{
-    type Response = ServiceResponse<EitherBody<B>>;
-    type Error = Error;
-    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-    forward_ready!(service);
-
-    fn call(&self, req: ServiceRequest) -> Self::Future {
-        let auth = req.headers().get(AUTHORIZATION);
-        if auth.is_none() {
-            let http_res = HttpResponse::build(StatusCode::UNAUTHORIZED)
-                .insert_header(ContentType::json())
-                .body(json!({"success": false, "message": "unauthorized"}).to_string());
-            let (http_req, _) = req.into_parts();
-            let res = ServiceResponse::new(http_req, http_res);
-            return (async move { Ok(res.map_into_right_body()) }).boxed_local();
-        }
-
-        let token_h = auth.and_then(|t| t.to_str().ok()).unwrap_or_default();
-        let token_s: Vec<&str> = token_h.split_whitespace().collect();
-        let mut token = "";
-
-        if token_s.len() > 1 {
-            token = token_s[1];
-        }
-
-        let app_data = match req.app_data::<Data<AppState>>() {
-            Some(e) => e,
-            None => {
-                log::error!("Error trying to access app state from middleware.");
-                let http_res = HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-                    .insert_header(ContentType::json())
-                    .body(
-                        json!({"success": false, "message": "internal server error"}).to_string(),
-                    );
-                let (http_req, _) = req.into_parts();
-                let res = ServiceResponse::new(http_req, http_res);
-                return (async move { Ok(res.map_into_right_body()) }).boxed_local();
-            }
-        };
-
-        let claims = match verify_token(token, &app_data.jwt_decoding_key) {
-            Ok(c) => c,
-            Err(e) => {
-                log::error!("Error trying to verify the token: {}", e);
-                let http_res = HttpResponse::build(StatusCode::UNAUTHORIZED)
-                    .insert_header(ContentType::json())
-                    .body(json!({"success": false, "message": "unauthorized"}).to_string());
-                let (http_req, _) = req.into_parts();
-                let res = ServiceResponse::new(http_req, http_res);
-                return (async move { Ok(res.map_into_right_body()) }).boxed_local();
-            }
-        };
-
-        req.extensions_mut().insert(claims);
-        let fut = self.service.call(req);
-
-        Box::pin(async move {
-            let res = fut.await?;
-            Ok(res.map_into_left_body())
-        })
+pub async fn auth_middleware(
+    req: ServiceRequest,
+    next: Next<impl MessageBody>,
+) -> Result<ServiceResponse<impl MessageBody>, Error> {
+    let auth = req.headers().get(AUTHORIZATION);
+    if auth.is_none() {
+        return Err(actix_web::error::ErrorUnauthorized(
+            json!({"success": false, "message": "unauthorized"}).to_string(),
+        ));
     }
+
+    let token_h = auth.and_then(|t| t.to_str().ok()).unwrap_or_default();
+    let token_s: Vec<&str> = token_h.split_whitespace().collect();
+    let mut token = "";
+
+    if token_s.len() > 1 {
+        token = token_s[1];
+    }
+
+    let app_data = match req.app_data::<Data<AppState>>() {
+        Some(e) => e,
+        None => {
+            log::error!("Error trying to access app state from middleware.");
+            return Err(actix_web::error::ErrorInternalServerError(
+                json!({"success": false, "message": "internal server error"}).to_string(),
+            ));
+        }
+    };
+
+    let claims = match verify_token(token, &app_data.jwt_decoding_key) {
+        Ok(c) => c,
+        Err(e) => {
+            log::error!("Error trying to verify the token: {}", e);
+            return Err(actix_web::error::ErrorUnauthorized(
+                json!({"success": false, "message": "unauthorized"}).to_string(),
+            ));
+        }
+    };
+
+    let mut session_db_con = match app_data.session_db.acquire().await {
+        Ok(s) => s,
+        Err(e) => {
+            log::error!(
+                "Error trying to acquire connection to session database: {}",
+                e
+            );
+            return Err(actix_web::error::ErrorInternalServerError(
+                json!({"success": false, "message": "internal server error"}).to_string(),
+            ));
+        }
+    };
+
+    let session = match get_session_by_session_id(&mut *session_db_con, claims.sub.as_str())
+        .await
+        .unwrap_or_else(|e| {
+            log::error!("Error trying to get session by id; {}", e);
+            None
+        }) {
+        Some(s) => s,
+        None => {
+            return Err(actix_web::error::ErrorUnauthorized(
+                json!({"success": false, "message": "unauthorized"}).to_string(),
+            ));
+        }
+    };
+
+    if !session.is_refresh_token_valid() || !session.is_current_access_token_valid() {
+        return Err(actix_web::error::ErrorUnauthorized(
+            json!({"success": false, "message": "unauthorized"}).to_string(),
+        ));
+    }
+
+    req.extensions_mut().insert(session);
+
+    next.call(req).await
+    // post-processing
 }

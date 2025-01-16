@@ -26,8 +26,11 @@ FROM rust:1.83
 
 # copy the build artifact from the build stage
 COPY --from=build /finly-backend/target/release/finly-backend .
-RUN mkdir /database
-RUN mkdir /ssl
+
+RUN mkdir -p /app/database
+RUN mkdir /app/sql
+RUN mkdir /app/ssl
+RUN mkdir /app/html
 
 # set the startup command to run your binary
 CMD ["./finly-backend"]
