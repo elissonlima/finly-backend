@@ -22,15 +22,12 @@ use std::io;
 async fn main() -> io::Result<()> {
     dotenv::dotenv().ok();
 
-    let database_path = env::var("DATABASE_URL").expect("DATABASE_URL is not set in .env file");
-    let jwt_encoding_key_path =
-        env::var("JWT_ENC_PATH").expect("JWT_ENC_PATH is not set in .env file");
-    let jwt_decoding_key_path =
-        env::var("JWT_DEC_PATH").expect("JWT_DEC_PATH is not set in .env file");
-    let tls_key_path = env::var("TLS_KEY_PATH").expect("TLS_KEY_PATH is not set");
-    let tls_cert_path = env::var("TLS_CERT_PATH").expect("TLS_CERT_PATH is not set");
-    let session_db_ddl_script_path =
-        env::var("SESSION_DB_DDL_SCRIPT_PATH").expect("SESSION_DB_DDL_SCRIPT_PATH is not set");
+    let database_path = env::var("DATABASE_URL").unwrap();
+    let jwt_encoding_key_path = env::var("JWT_ENC_PATH").unwrap();
+    let jwt_decoding_key_path = env::var("JWT_DEC_PATH").unwrap();
+    let tls_key_path = env::var("TLS_KEY_PATH").unwrap();
+    let tls_cert_path = env::var("TLS_CERT_PATH").unwrap();
+    let session_db_ddl_script_path = env::var("SESSION_DB_DDL_SCRIPT_PATH").unwrap();
 
     // Setting Log configuration
     let env = env_logger::Env::default()
@@ -46,10 +43,8 @@ async fn main() -> io::Result<()> {
         database::DbConnection::build_in_memory(session_db_ddl_script_path.as_str()).await;
     log::info!("Started connection pool with database");
 
-    let jwt_enc_key_fs = fs::read(jwt_encoding_key_path).unwrap();
-    let jwt_dec_key_fs = fs::read(jwt_decoding_key_path).unwrap();
-    let jwt_enc_key = EncodingKey::from_rsa_pem(&jwt_enc_key_fs).unwrap();
-    let jwt_dec_key = DecodingKey::from_rsa_pem(&jwt_dec_key_fs).unwrap();
+    let jwt_enc_key = EncodingKey::from_rsa_pem(&fs::read(jwt_encoding_key_path)?).unwrap();
+    let jwt_dec_key = DecodingKey::from_rsa_pem(&fs::read(jwt_decoding_key_path)?).unwrap();
 
     let shared_data = web::Data::new(AppState {
         db: db.pool,
@@ -76,6 +71,7 @@ async fn main() -> io::Result<()> {
             .configure(routes::token_routes)
             .configure(routes::misc_routes)
             .configure(routes::html_routes)
+            .configure(routes::reset_password_routes)
     };
 
     HttpServer::new(app)

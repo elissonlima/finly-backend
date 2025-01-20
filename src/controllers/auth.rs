@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::model::{session::Session, user::User};
+use crate::model::{session::Session, user::AuthType, user::User};
 use crate::request_types::auth::CreateUserReq;
 use chrono::prelude::{DateTime, Utc};
 use sqlx::Row;
@@ -13,7 +13,7 @@ where
         r#"SELECT 
             id, email, name,
             password, created_at,
-            auth_type, is_email_verified,
+            auth_type as "auth_type!: AuthType", is_email_verified,
             is_premium
            FROM user WHERE email = $1"#,
         email
@@ -69,7 +69,7 @@ where
     let password = bcrypt::hash(req.password, bcrypt::DEFAULT_COST)?;
     let utc_now: DateTime<Utc> = Utc::now().into();
     let created_at = utc_now.to_rfc3339();
-    let auth_type = String::from("USERNAME_PASSWORD");
+    let auth_type = AuthType::UsernamePassword;
     let is_email_verified = 0;
     let is_premium = 0;
 
@@ -96,7 +96,7 @@ where
         id,
         email: req.email,
         name: req.name,
-        password,
+        password: Some(password),
         created_at,
         auth_type,
         is_email_verified,

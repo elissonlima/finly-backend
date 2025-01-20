@@ -1,7 +1,12 @@
 use actix_web::{middleware::from_fn, web};
 
 use crate::{
-    handlers::{auth::*, html::terms_of_use, misc::ping},
+    handlers::{
+        auth::*,
+        html::terms_of_use,
+        misc::ping,
+        reset_password::{create_reset_password_request, reset_password_form},
+    },
     middleware::{auth_middleware, refresh_token_middleware},
 };
 
@@ -31,4 +36,15 @@ pub fn misc_routes(cfg: &mut web::ServiceConfig) {
 
 pub fn html_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(web::scope("/html").route("/terms", web::get().to(terms_of_use)));
+}
+
+pub fn reset_password_routes(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::scope("/password")
+            .route(
+                "/request_reset",
+                web::post().to(create_reset_password_request),
+            )
+            .route("/reset", web::get().to(reset_password_form)),
+    );
 }

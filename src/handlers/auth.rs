@@ -7,10 +7,14 @@ use serde_json::json;
 use crate::controllers::auth::*;
 use crate::jwt::{generate_token, TokenClaims};
 use crate::model::session::Session;
+use crate::model::user::AuthType;
 use crate::request_types::auth::{CreateUserReq, LoginUserReq};
 use crate::state;
 
-use super::util::{build_error_response, build_unauthorized_response};
+use super::util::{
+    build_conflict_response, build_error_response, build_method_not_allowed,
+    build_unauthorized_response,
+};
 
 pub async fn refresh_token(
     req: HttpRequest,
@@ -31,10 +35,11 @@ pub async fn refresh_token(
     let mut session_db_con = match app_state.session_db.acquire().await {
         Ok(c) => c,
         Err(e) => {
-            return build_error_response(format!(
+            log::error!(
                 "An error occurred when tried to acquire a connection to session db from pool: {}",
                 e
-            ));
+            );
+            return build_error_response();
         }
     };
 
@@ -42,10 +47,11 @@ pub async fn refresh_token(
         match get_session_by_user_email(&mut *session_db_con, user_email.as_str()).await {
             Ok(s) => s,
             Err(e) => {
-                return build_error_response(format!(
+                log::error!(
                     "An error ocurred when tried to get session by user email: {}",
                     e
-                ));
+                );
+                return build_error_response();
             }
         };
     let mut session = match session_req {
@@ -70,10 +76,8 @@ pub async fn refresh_token(
         ) {
             Ok(a) => a,
             Err(e) => {
-                return build_error_response(format!(
-                    "An error occurred while generating access_token: {}",
-                    e
-                ));
+                log::error!("An error occurred while generating access_token: {}", e);
+                return build_error_response();
             }
         };
 
@@ -83,7 +87,8 @@ pub async fn refresh_token(
         match update_session(&mut *session_db_con, &session).await {
             Ok(_) => (),
             Err(err) => {
-                return build_error_response(format!("Error while trying update session: {err}"));
+                log::error!("Error while trying update session: {}", err);
+                return build_error_response();
             }
         };
     }
@@ -107,37 +112,45 @@ pub async fn login_user(
     let mut con = match app_state.db.acquire().await {
         Ok(c) => c,
         Err(e) => {
-            return build_error_response(format!(
+            log::error!(
                 "An error occurred when tried to acquire a db connection from pool: {}",
                 e
-            ))
+            );
+            return build_error_response();
         }
     };
 
     let db_user_req = match get_user(req.email.as_str(), &mut *con).await {
         Ok(u) => u,
         Err(e) => {
-            return build_error_response(format!(
+            log::error!(
                 "An error occurred when tried to retrieve user from database: {}",
                 e
-            ));
+            );
+            return build_error_response();
         }
     };
 
     let db_user = match db_user_req {
-        Some(u) => u,
+        Some(u) => {
+            if u.auth_type != AuthType::UsernamePassword {
+                return build_method_not_allowed(Some(String::from(
+                    "auth method is not username and password",
+                )));
+            }
+            u
+        }
         None => {
             return build_unauthorized_response(Some(String::from("incorrect email or password")));
         }
     };
 
-    let is_pwd_valid = match bcrypt::verify(req.password.as_str(), db_user.password.as_str()) {
+    let pwd = db_user.password.unwrap_or_else(|| String::from(""));
+    let is_pwd_valid = match bcrypt::verify(req.password.as_str(), pwd.as_str()) {
         Ok(i) => i,
         Err(e) => {
-            return build_error_response(format!(
-                "An error occurred while verifying user's password: {}",
-                e
-            ));
+            log::error!("An error occurred while verifying user's password: {}", e);
+            return build_error_response();
         }
     };
 
@@ -148,10 +161,11 @@ pub async fn login_user(
     let mut session_db_con = match app_state.session_db.acquire().await {
         Ok(c) => c,
         Err(e) => {
-            return build_error_response(format!(
+            log::error!(
                 "An error occurred when tried to acquire a connection to session db from pool: {}",
                 e
-            ));
+            );
+            return build_error_response();
         }
     };
 
@@ -159,10 +173,11 @@ pub async fn login_user(
         match get_session_by_user_email(&mut *session_db_con, db_user.email.as_str()).await {
             Ok(s) => s,
             Err(e) => {
-                return build_error_response(format!(
+                log::error!(
                     "An error ocurred when tried to get session by user email: {}",
                     e
-                ));
+                );
+                return build_error_response();
             }
         };
 
@@ -183,10 +198,8 @@ pub async fn login_user(
         ) {
             Ok(a) => a,
             Err(e) => {
-                return build_error_response(format!(
-                    "An error occurred while generating refresh_token: {}",
-                    e
-                ));
+                log::error!("An error occurred while generating refresh_token: {}", e);
+                return build_error_response();
             }
         };
 
@@ -204,10 +217,8 @@ pub async fn login_user(
         ) {
             Ok(a) => a,
             Err(e) => {
-                return build_error_response(format!(
-                    "An error occurred while generating access_token: {}",
-                    e
-                ));
+                log::error!("An error occurred while generating access_token: {}", e);
+                return build_error_response();
             }
         };
 
@@ -221,18 +232,16 @@ pub async fn login_user(
         match create_session(&mut *session_db_con, &session).await {
             Ok(_) => (),
             Err(err) => {
-                return build_error_response(format!(
-                    "Error attempting create session on database: {err}"
-                ));
+                log::error!("Error attempting create session on database: {}", err);
+                return build_error_response();
             }
         };
     } else if refresh_session {
         match update_session(&mut *session_db_con, &session).await {
             Ok(_) => (),
             Err(err) => {
-                return build_error_response(format!(
-                    "Error attempting update session on database: {err}"
-                ));
+                log::error!("Error attempting update session on database: {}", err);
+                return build_error_response();
             }
         };
     }
@@ -266,34 +275,37 @@ pub async fn post_new_user(
     let mut con = match app_state.db.acquire().await {
         Ok(c) => c,
         Err(e) => {
-            return build_error_response(format!(
+            log::error!(
                 "An error occurred when tried to acquire a db connection from pool: {}",
                 e
-            ));
+            );
+            return build_error_response();
         }
     };
 
     let email_exists = match check_email_exists(new_user.email.as_str(), &mut *con).await {
         Ok(c) => c,
         Err(e) => {
-            return build_error_response(format!(
+            log::error!(
                 "An error occurred when tried to check if email exists on the db: {}",
                 e
-            ));
+            );
+            return build_error_response();
         }
     };
 
     if email_exists {
-        return build_unauthorized_response(Some(String::from("email already exists")));
+        return build_conflict_response(Some(String::from("email already exists")));
     }
 
     let _ = match create_user(&mut *con, new_user.into()).await {
         Ok(u) => u,
         Err(e) => {
-            return build_error_response(format!(
+            log::error!(
                 "An error occurred when tried to insert user on the database: {}",
                 e
-            ));
+            );
+            return build_error_response();
         }
     };
 

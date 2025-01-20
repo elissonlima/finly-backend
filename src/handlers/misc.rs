@@ -1,10 +1,10 @@
 use actix_web::{
     http::{header::ContentType, StatusCode},
-    web, HttpMessage, HttpRequest, HttpResponse,
+    HttpMessage, HttpRequest, HttpResponse,
 };
 use serde_json::json;
 
-use crate::{model::session::Session, state};
+use crate::model::session::Session;
 
 use super::util::build_error_response;
 
@@ -13,7 +13,8 @@ pub async fn ping(req: HttpRequest) -> HttpResponse {
     let session = match ext.get::<Session>() {
         Some(c) => c,
         None => {
-            return build_error_response(format!("Could not retrieve sesion from request object."));
+            log::error!("Could not retrieve sesion from request object.");
+            return build_error_response();
         }
     };
 

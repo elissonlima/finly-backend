@@ -1,6 +1,6 @@
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::SqliteConnectOptions;
-use sqlx::{Acquire, Pool, Sqlite, SqlitePool};
+use sqlx::{Pool, Sqlite, SqlitePool};
 use std::fs::File;
 use std::io::Read;
 
