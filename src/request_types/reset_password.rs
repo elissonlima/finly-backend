@@ -13,3 +13,16 @@ impl From<web::Json<CreateResetPasswordReq>> for CreateResetPasswordReq {
         }
     }
 }
+
+#[derive(Deserialize)]
+pub struct ResetPasswordFormReq {
+    pub t: String,
+}
+
+#[derive(Deserialize)]
+pub struct DoResetPasswordReq {
+    pub password: String,
+    #[serde(alias = "confirmPassword")]
+    pub confirm_password: String,
+    pub t: String,
+}

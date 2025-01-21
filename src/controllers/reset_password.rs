@@ -81,6 +81,101 @@ where
     }
 }
 
+pub async fn check_reset_password_id<'a, T>(id: &str, con: T) -> Result<bool, sqlx::error::Error>
+where
+    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+{
+    let res = sqlx::query!(
+        r#"
+        SELECT expires_at, is_password_reset FROM reset_password WHERE id = $1
+    "#,
+        id
+    )
+    .fetch_all(con)
+    .await?;
+
+    if res.len() == 0 {
+        return Ok(false);
+    }
+
+    let row = res.get(0).unwrap();
+
+    //Token used
+    if row.is_password_reset == 1 {
+        return Ok(false);
+    }
+
+    let exp_datetime = match DateTime::parse_from_rfc3339(row.expires_at.as_str()) {
+        Ok(d) => d.with_timezone(&Utc),
+        Err(_) => {
+            return Ok(false);
+        }
+    };
+
+    if Utc::now().gt(&exp_datetime) {
+        return Ok(false);
+    }
+
+    Ok(true)
+}
+
+pub async fn get_reset_password_email_valid_id<'a, T>(
+    id: &str,
+    con: T,
+) -> Result<Option<String>, sqlx::error::Error>
+where
+    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+{
+    let res = sqlx::query!(
+        r#"
+        SELECT user_email, expires_at, is_password_reset FROM reset_password WHERE id = $1
+    "#,
+        id
+    )
+    .fetch_all(con)
+    .await?;
+
+    if res.len() == 0 {
+        return Ok(None);
+    }
+
+    let row = res.get(0).unwrap();
+
+    //Token used
+    if row.is_password_reset == 1 {
+        return Ok(None);
+    }
+
+    let exp_datetime = match DateTime::parse_from_rfc3339(row.expires_at.as_str()) {
+        Ok(d) => d.with_timezone(&Utc),
+        Err(_) => {
+            return Ok(None);
+        }
+    };
+
+    if Utc::now().gt(&exp_datetime) {
+        return Ok(None);
+    }
+
+    Ok(Some(String::from(row.user_email.as_str())))
+}
+
+pub async fn toggle_reset_password_flag<'a, T>(id: &str, con: T) -> Result<(), sqlx::error::Error>
+where
+    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+{
+    let _ = sqlx::query!(
+        r#"
+        UPDATE reset_password SET is_password_reset = 1 WHERE id = $1;
+    "#,
+        id
+    )
+    .execute(con)
+    .await?;
+
+    Ok(())
+}
+
 fn string_datetime_to_epoch(str_datetime: &str) -> i64 {
     let datetime = match DateTime::parse_from_rfc3339(str_datetime) {
         Ok(d) => d.with_timezone(&Utc).timestamp() as i64,

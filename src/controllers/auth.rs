@@ -59,6 +59,28 @@ where
     Ok(false)
 }
 
+pub async fn update_password<'a, T>(
+    user_email: &str,
+    new_password: &str,
+    con: T,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+{
+    let password = bcrypt::hash(new_password, bcrypt::DEFAULT_COST)?;
+    let _ = sqlx::query!(
+        r#"
+        UPDATE user SET password = $1 WHERE email = $2;
+    "#,
+        password,
+        user_email
+    )
+    .execute(con)
+    .await?;
+
+    Ok(())
+}
+
 pub async fn create_user<'a, T>(
     con: T,
     req: CreateUserReq,

@@ -1,11 +1,12 @@
 use actix_web::{middleware::from_fn, web};
 
 use crate::{
+    controllers::reset_password,
     handlers::{
         auth::*,
         html::terms_of_use,
         misc::ping,
-        reset_password::{create_reset_password_request, reset_password_form},
+        reset_password::{create_reset_password_request, do_reset_password, reset_password_form},
     },
     middleware::{auth_middleware, refresh_token_middleware},
 };
@@ -45,6 +46,7 @@ pub fn reset_password_routes(cfg: &mut web::ServiceConfig) {
                 "/request_reset",
                 web::post().to(create_reset_password_request),
             )
-            .route("/reset", web::get().to(reset_password_form)),
+            .route("/reset", web::get().to(reset_password_form))
+            .route("/reset", web::post().to(do_reset_password)),
     );
 }

@@ -9,7 +9,6 @@ services:
       - ~/code/ssl:/app/ssl
       - ./html:/app/html
       - ./sql:/app/sql
-      - ~/.aws:/root/.aws
     environment:
       - DATABASE_URL=sqlite:///app/database/main.db
       - JWT_ENC_PATH=/app/ssl/jwt.pem
@@ -17,6 +16,8 @@ services:
       - TLS_KEY_PATH=/app/ssl/priv.key
       - TLS_CERT_PATH=/app/ssl/certificate.crt
       - SESSION_DB_DDL_SCRIPT_PATH=/app/sql/init_session_db.sql
-      - AWS_PROFILE=finly-dev
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
       - AWS_REGION=us-east-1
 
