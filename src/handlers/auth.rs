@@ -5,6 +5,7 @@ use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
 
 use crate::controllers::auth::*;
+use crate::controllers::session_mgm::{create_session, get_session_by_user_email, update_session};
 use crate::jwt::{generate_token, TokenClaims};
 use crate::model::session::Session;
 use crate::model::user::AuthType;
@@ -32,7 +33,7 @@ pub async fn refresh_token(
     };
     let user_email = claims.sub.clone();
 
-    let mut session_db_con = match app_state.session_db.acquire().await {
+    let mut db = match app_state.db.acquire().await {
         Ok(c) => c,
         Err(e) => {
             log::error!(
@@ -43,17 +44,16 @@ pub async fn refresh_token(
         }
     };
 
-    let session_req =
-        match get_session_by_user_email(&mut *session_db_con, user_email.as_str()).await {
-            Ok(s) => s,
-            Err(e) => {
-                log::error!(
-                    "An error ocurred when tried to get session by user email: {}",
-                    e
-                );
-                return build_error_response();
-            }
-        };
+    let session_req = match get_session_by_user_email(&mut *db, user_email.as_str()).await {
+        Ok(s) => s,
+        Err(e) => {
+            log::error!(
+                "An error ocurred when tried to get session by user email: {}",
+                e
+            );
+            return build_error_response();
+        }
+    };
     let mut session = match session_req {
         Some(s) => s,
         None => {
@@ -84,7 +84,7 @@ pub async fn refresh_token(
         session.current_access_token = access_token;
         session.current_access_token_expires_at = access_token_exp.to_rfc3339();
 
-        match update_session(&mut *session_db_con, &session).await {
+        match update_session(&mut *db, &session).await {
             Ok(_) => (),
             Err(err) => {
                 log::error!("Error while trying update session: {}", err);
@@ -158,28 +158,16 @@ pub async fn login_user(
         return build_unauthorized_response(Some(String::from("incorrect email or password")));
     }
 
-    let mut session_db_con = match app_state.session_db.acquire().await {
-        Ok(c) => c,
+    let session_req = match get_session_by_user_email(&mut *con, db_user.email.as_str()).await {
+        Ok(s) => s,
         Err(e) => {
             log::error!(
-                "An error occurred when tried to acquire a connection to session db from pool: {}",
+                "An error ocurred when tried to get session by user email: {}",
                 e
             );
             return build_error_response();
         }
     };
-
-    let session_req =
-        match get_session_by_user_email(&mut *session_db_con, db_user.email.as_str()).await {
-            Ok(s) => s,
-            Err(e) => {
-                log::error!(
-                    "An error ocurred when tried to get session by user email: {}",
-                    e
-                );
-                return build_error_response();
-            }
-        };
 
     let mut new_session = false;
     let mut refresh_session = false;
@@ -228,8 +216,7 @@ pub async fn login_user(
     }
 
     if new_session {
-        log::warn!("DEBUG!");
-        match create_session(&mut *session_db_con, &session).await {
+        match create_session(&mut *con, &session).await {
             Ok(_) => (),
             Err(err) => {
                 log::error!("Error attempting create session on database: {}", err);
@@ -237,7 +224,7 @@ pub async fn login_user(
             }
         };
     } else if refresh_session {
-        match update_session(&mut *session_db_con, &session).await {
+        match update_session(&mut *con, &session).await {
             Ok(_) => (),
             Err(err) => {
                 log::error!("Error attempting update session on database: {}", err);

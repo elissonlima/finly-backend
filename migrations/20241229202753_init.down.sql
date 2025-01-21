@@ -2,3 +2,4 @@
 
 DROP TABLE user;
 DROP TABLE reset_password ;
+DROP TABLE sessions;

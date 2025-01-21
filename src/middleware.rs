@@ -9,7 +9,9 @@ use actix_web::{
 
 use serde_json::json;
 
-use crate::{controllers::auth::get_session_by_session_id, jwt::verify_token, state::AppState};
+use crate::{
+    controllers::session_mgm::get_session_by_session_id, jwt::verify_token, state::AppState,
+};
 
 pub async fn refresh_token_middleware(
     req: ServiceRequest,
@@ -94,7 +96,7 @@ pub async fn auth_middleware(
         }
     };
 
-    let mut session_db_con = match app_data.session_db.acquire().await {
+    let mut con = match app_data.db.acquire().await {
         Ok(s) => s,
         Err(e) => {
             log::error!(
@@ -107,7 +109,7 @@ pub async fn auth_middleware(
         }
     };
 
-    let session = match get_session_by_session_id(&mut *session_db_con, claims.sub.as_str())
+    let session = match get_session_by_session_id(&mut *con, claims.sub.as_str())
         .await
         .unwrap_or_else(|e| {
             log::error!("Error trying to get session by id; {}", e);

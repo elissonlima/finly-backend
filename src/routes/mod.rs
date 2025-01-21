@@ -1,12 +1,11 @@
 use actix_web::{middleware::from_fn, web};
 
 use crate::{
-    controllers::reset_password,
     handlers::{
         auth::*,
         html::terms_of_use,
-        misc::ping,
         reset_password::{create_reset_password_request, do_reset_password, reset_password_form},
+        session_mgm::{logout_user, ping},
     },
     middleware::{auth_middleware, refresh_token_middleware},
 };
@@ -27,11 +26,12 @@ pub fn token_routes(cfg: &mut web::ServiceConfig) {
     );
 }
 
-pub fn misc_routes(cfg: &mut web::ServiceConfig) {
+pub fn session_mgm_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
-        web::scope("/ping")
+        web::scope("/session")
             .wrap(from_fn(auth_middleware))
-            .route("", web::get().to(ping)),
+            .route("/ping", web::get().to(ping))
+            .route("/logout", web::post().to(logout_user)),
     );
 }
 

@@ -27,7 +27,6 @@ async fn main() -> io::Result<()> {
     let jwt_decoding_key_path = env::var("JWT_DEC_PATH").unwrap();
     let tls_key_path = env::var("TLS_KEY_PATH").unwrap();
     let tls_cert_path = env::var("TLS_CERT_PATH").unwrap();
-    let session_db_ddl_script_path = env::var("SESSION_DB_DDL_SCRIPT_PATH").unwrap();
 
     // Setting Log configuration
     let env = env_logger::Env::default()
@@ -39,8 +38,6 @@ async fn main() -> io::Result<()> {
     log::info!("Starting server");
 
     let db = database::DbConnection::build(database_path.as_str()).await;
-    let session_db =
-        database::DbConnection::build_in_memory(session_db_ddl_script_path.as_str()).await;
     log::info!("Started connection pool with database");
 
     let jwt_enc_key = EncodingKey::from_rsa_pem(&fs::read(jwt_encoding_key_path)?).unwrap();
@@ -48,7 +45,6 @@ async fn main() -> io::Result<()> {
 
     let shared_data = web::Data::new(AppState {
         db: db.pool,
-        session_db: session_db.pool,
         jwt_encoding_key: jwt_enc_key,
         jwt_decoding_key: jwt_dec_key,
     });
@@ -69,7 +65,7 @@ async fn main() -> io::Result<()> {
             .wrap(Compress::default())
             .configure(routes::auth_routes)
             .configure(routes::token_routes)
-            .configure(routes::misc_routes)
+            .configure(routes::session_mgm_routes)
             .configure(routes::html_routes)
             .configure(routes::reset_password_routes)
     };

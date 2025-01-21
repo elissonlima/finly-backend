@@ -20,3 +20,12 @@ CREATE TABLE reset_password (
     is_password_reset INTEGER NOT NULL
 );
 
+CREATE TABLE sessions (
+    id TEXT PRIMARY KEY,
+    user_email TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    refresh_token_expires_at TEXT NOT NULL,
+    current_access_token TEXT NOT NULL,
+    current_access_token_expires_at TEXT NOT NULL
+);
