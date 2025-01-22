@@ -11,7 +11,7 @@ use serde_json::json;
 
 use crate::{
     controllers::{
-        auth::update_password,
+        auth::{check_email_exists, update_password},
         reset_password::{
             self, check_reset_password_id, get_reset_password_email_valid_id,
             toggle_reset_password_flag,
@@ -41,6 +41,32 @@ pub async fn create_reset_password_request(
             return build_error_response();
         }
     };
+
+    let _ = match check_email_exists(req.email.as_str(), &mut *con).await {
+        Ok(c) => {
+            //Send CREATED to avoid requests to check whether the email
+            //exists on DB or not.
+            if !c {
+                return HttpResponse::build(StatusCode::CREATED)
+                    .insert_header(ContentType::json())
+                    .body(
+                        json!({
+                        "success": true,
+                        "message": "email sent"
+                        })
+                        .to_string(),
+                    );
+            }
+        }
+        Err(e) => {
+            log::error!(
+                "An error occurred when tried to check if email exists on the db: {}",
+                e
+            );
+            return build_error_response();
+        }
+    };
+
     //Check if the email does not have an reset record already created
     match reset_password::get_reset_password_expiration_if_exists(req.email.as_str(), &mut *con)
         .await
@@ -100,11 +126,12 @@ pub async fn create_reset_password_request(
         }
     };
 
-    HttpResponse::build(StatusCode::OK)
+    HttpResponse::build(StatusCode::CREATED)
         .insert_header(ContentType::json())
         .body(
             json!({
             "success": true,
+            "message": "email sent"
             })
             .to_string(),
         )
