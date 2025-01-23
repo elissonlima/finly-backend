@@ -27,6 +27,7 @@ async fn main() -> io::Result<()> {
     let jwt_decoding_key_path = env::var("JWT_DEC_PATH").unwrap();
     let tls_key_path = env::var("TLS_KEY_PATH").unwrap();
     let tls_cert_path = env::var("TLS_CERT_PATH").unwrap();
+    let google_oauth_client_id = env::var("GOOGLE_WEB_CLIENT_ID").unwrap();
 
     // Setting Log configuration
     let env = env_logger::Env::default()
@@ -47,6 +48,7 @@ async fn main() -> io::Result<()> {
         db: db.pool,
         jwt_encoding_key: jwt_enc_key,
         jwt_decoding_key: jwt_dec_key,
+        google_oauth_client_id,
     });
 
     // load TLS keys

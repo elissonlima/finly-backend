@@ -32,3 +32,16 @@ impl From<web::Json<LoginUserReq>> for LoginUserReq {
         }
     }
 }
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct GoogleSignInReq {
+    pub token: String,
+}
+
+impl From<web::Json<GoogleSignInReq>> for GoogleSignInReq {
+    fn from(payload: web::Json<GoogleSignInReq>) -> Self {
+        GoogleSignInReq {
+            token: payload.token.clone(),
+        }
+    }
+}

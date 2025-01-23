@@ -14,7 +14,8 @@ pub fn auth_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/auth")
             .route("/create_user", web::post().to(post_new_user))
-            .route("/login", web::post().to(login_user)),
+            .route("/login", web::post().to(login_user))
+            .route("/google_signin", web::post().to(google_signin)),
     );
 }
 

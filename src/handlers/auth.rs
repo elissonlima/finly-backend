@@ -1,3 +1,5 @@
+use std::process::{Command, Stdio};
+
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
@@ -7,13 +9,13 @@ use uuid::Uuid;
 
 use crate::controllers::auth::*;
 use crate::controllers::session_mgm::{
-    create_session, delete_session_by_id, get_session_by_session_id, get_session_by_user_email,
-    reset_session, update_session,
+    create_session, get_session_by_session_id, get_session_by_user_email, reset_session,
+    update_session,
 };
 use crate::jwt::{generate_token, TokenClaims};
 use crate::model::session::Session;
-use crate::model::user::AuthType;
-use crate::request_types::auth::{CreateUserReq, LoginUserReq};
+use crate::model::user::{AuthType, User};
+use crate::request_types::auth::{CreateUserReq, GoogleSignInReq, LoginUserReq};
 use crate::state;
 
 use super::util::{
@@ -288,7 +290,15 @@ pub async fn post_new_user(
         return build_conflict_response(Some(String::from("email already exists")));
     }
 
-    let _ = match create_user(&mut *con, new_user.into()).await {
+    let usr_obj = match User::from_signup_request(new_user.into()) {
+        Ok(e) => e,
+        Err(e) => {
+            log::error!("An error ocurred when tried to create user object: {}", e);
+            return build_error_response();
+        }
+    };
+
+    let _ = match create_user(&mut *con, usr_obj).await {
         Ok(u) => u,
         Err(e) => {
             log::error!(
@@ -308,4 +318,201 @@ pub async fn post_new_user(
             })
             .to_string(),
         );
+}
+
+pub async fn google_signin(
+    req: web::Json<GoogleSignInReq>,
+    app_state: web::Data<state::AppState>,
+) -> HttpResponse {
+    let oauth_res = match Command::new("sh")
+        .arg("-c")
+        .arg("google_oauth_api_client")
+        .env("GOOGLE_OAUTH_EXEC_INPUT_TOKEN", req.token.as_str())
+        .env(
+            "GOOGLE_OAUTH_EXEC_CLIENT_ID",
+            app_state.google_oauth_client_id.as_str(),
+        )
+        .stdout(Stdio::piped())
+        .output()
+    {
+        Ok(c) => {
+            let o = std::str::from_utf8(&c.stdout).unwrap_or_else(|_| "");
+            let e = std::str::from_utf8(&c.stderr).unwrap_or_else(|_| "");
+            let status_code = c.status.code().unwrap_or_else(|| -1);
+            if status_code == 0 {
+                Some(String::from(o))
+            } else {
+                log::warn!("Could not get google_oauth user information: {}", e);
+                None
+            }
+        }
+        Err(e) => {
+            log::error!(
+                "An error occurred when tried to run google_oauth_api_client {}",
+                e
+            );
+            return build_error_response();
+        }
+    };
+
+    if oauth_res.is_none() {
+        return build_unauthorized_response(Some("invalid token".to_string()));
+    }
+
+    let oauth_user_data: GoogleOauthUserInformation = match serde_json::from_str(
+        oauth_res.unwrap().as_str(),
+    ) {
+        Ok(o) => o,
+        Err(e) => {
+            log::error!("An error occurred when tried to convert the google oauth information to object: {}", e);
+            return build_error_response();
+        }
+    };
+
+    let mut con = match app_state.db.acquire().await {
+        Ok(c) => c,
+        Err(e) => {
+            log::error!(
+                "An error occurred when tried to acquire a db connection from pool: {}",
+                e
+            );
+            return build_error_response();
+        }
+    };
+
+    //CHECK IF THERE'S A USER WITH SAME EMAIL
+    let mut new_user = false;
+    let mut usr = match get_user(oauth_user_data.email.as_str(), &mut *con).await {
+        Ok(u) => {
+            if u.is_some() {
+                let res = u.unwrap();
+                if res.auth_type != AuthType::Google {
+                    return build_method_not_allowed(Some("invalid auth method".to_string()));
+                } else {
+                    res
+                }
+            } else {
+                new_user = true;
+                User::from_google(oauth_user_data)
+            }
+        }
+        Err(e) => {
+            log::error!("Error trying to get user from database: {}", e);
+            return build_error_response();
+        }
+    };
+
+    if new_user {
+        let usr_database = match create_user(&mut *con, usr).await {
+            Ok(u) => u,
+            Err(e) => {
+                log::error!(
+                    "An error ocurred when tried to insert a new user on the database: {}",
+                    e
+                );
+                return build_error_response();
+            }
+        };
+        usr = usr_database.clone();
+    }
+
+    //GENERATE REFRESH_TOKEN AND ACCESS_TOKEN
+    let session_req = match get_session_by_user_email(&mut *con, usr.email.as_str()).await {
+        Ok(s) => s,
+        Err(e) => {
+            log::error!(
+                "An error ocurred when tried to get session by user email: {}",
+                e
+            );
+            return build_error_response();
+        }
+    };
+
+    let mut new_session = false;
+    let mut refresh_session = false;
+    let mut session = session_req.unwrap_or_else(|| {
+        new_session = true;
+        Session::build(usr.email.as_str())
+    });
+
+    if !new_session {
+        session.id = Uuid::new_v4().to_string();
+        refresh_session = true;
+    }
+
+    let now: DateTime<Utc> = Utc::now().into();
+    let refresh_token_exp = now + Duration::days(1);
+    let refresh_token = match generate_token(
+        session.id.as_str(),
+        &app_state.jwt_encoding_key,
+        refresh_token_exp.clone(),
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            log::error!("An error occurred while generating refresh_token: {}", e);
+            return build_error_response();
+        }
+    };
+
+    session.refresh_token = refresh_token;
+    session.refresh_token_expires_at = refresh_token_exp.to_rfc3339();
+
+    let access_token_exp = now + Duration::minutes(15);
+    let access_token = match generate_token(
+        session.id.as_str(),
+        &app_state.jwt_encoding_key,
+        access_token_exp,
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            log::error!("An error occurred while generating access_token: {}", e);
+            return build_error_response();
+        }
+    };
+
+    session.current_access_token = access_token;
+    session.current_access_token_expires_at = access_token_exp.to_rfc3339();
+
+    if new_session {
+        match create_session(&mut *con, &session).await {
+            Ok(_) => (),
+            Err(err) => {
+                log::error!("Error attempting create session on database: {}", err);
+                return build_error_response();
+            }
+        };
+    } else if refresh_session {
+        match reset_session(&mut *con, &session).await {
+            Ok(_) => (),
+            Err(err) => {
+                log::error!("Error attempting update session on database: {}", err);
+                return build_error_response();
+            }
+        };
+    }
+
+    let mut sts = StatusCode::OK;
+    if new_user {
+        sts = StatusCode::CREATED
+    }
+    HttpResponse::build(sts)
+        .insert_header(ContentType::json())
+        .body(
+            json!({
+                "user": {
+                    "id": usr.id,
+                    "name": usr.name,
+                    "email": usr.email,
+                    "created_at": usr.created_at,
+                    "auth_type": usr.auth_type,
+                    "is_email_verified": usr.is_email_verified,
+                    "is_premium": usr.is_premium
+                },
+                "access_token": session.current_access_token,
+                "access_token_exp": session.current_access_token_expires_at,
+                "refresh_token": session.refresh_token,
+                "refresh_token_exp": session.refresh_token_expires_at,
+                "success": true})
+            .to_string(),
+        )
 }
