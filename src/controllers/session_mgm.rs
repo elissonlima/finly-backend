@@ -140,11 +140,42 @@ where
             UPDATE sessions
                 SET current_access_token = $1,
                     current_access_token_expires_at = $2
+
             WHERE id = $3
         "#,
         session.current_access_token,
         session.current_access_token_expires_at,
         session.id
+    )
+    .execute(con)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn reset_session<'a, T>(
+    con: T,
+    session: &Session,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+{
+    let _ = sqlx::query!(
+        r#"
+            UPDATE sessions
+                SET current_access_token = $1,
+                    current_access_token_expires_at = $2,
+                    refresh_token = $3,
+                    refresh_token_expires_at = $4,
+                    id = $5
+            WHERE user_email = $6
+        "#,
+        session.current_access_token,
+        session.current_access_token_expires_at,
+        session.refresh_token,
+        session.refresh_token_expires_at,
+        session.id,
+        session.user_email
     )
     .execute(con)
     .await?;

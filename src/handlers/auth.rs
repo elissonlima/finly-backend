@@ -3,9 +3,13 @@ use actix_web::http::StatusCode;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
+use uuid::Uuid;
 
 use crate::controllers::auth::*;
-use crate::controllers::session_mgm::{create_session, get_session_by_user_email, update_session};
+use crate::controllers::session_mgm::{
+    create_session, delete_session_by_id, get_session_by_session_id, get_session_by_user_email,
+    reset_session, update_session,
+};
 use crate::jwt::{generate_token, TokenClaims};
 use crate::model::session::Session;
 use crate::model::user::AuthType;
@@ -31,7 +35,7 @@ pub async fn refresh_token(
                 .body(json!({"success": false, "message": "internal server error"}).to_string());
         }
     };
-    let user_email = claims.sub.clone();
+    let session_id = claims.sub.clone();
 
     let mut db = match app_state.db.acquire().await {
         Ok(c) => c,
@@ -44,7 +48,7 @@ pub async fn refresh_token(
         }
     };
 
-    let session_req = match get_session_by_user_email(&mut *db, user_email.as_str()).await {
+    let session_req = match get_session_by_session_id(&mut *db, session_id.as_str()).await {
         Ok(s) => s,
         Err(e) => {
             log::error!(
@@ -61,7 +65,7 @@ pub async fn refresh_token(
         }
     };
 
-    if !session.is_refresh_token_valid() || user_email.ne(&session.user_email) {
+    if !session.is_refresh_token_valid() {
         return build_unauthorized_response(None);
     }
 
@@ -176,44 +180,43 @@ pub async fn login_user(
         Session::build(db_user.email.as_str())
     });
 
+    if !new_session {
+        session.id = Uuid::new_v4().to_string();
+        refresh_session = true;
+    }
+
     let now: DateTime<Utc> = Utc::now().into();
-    if !session.is_refresh_token_valid() {
-        let refresh_token_exp = now + Duration::days(1);
-        let refresh_token = match generate_token(
-            db_user.email.as_str(),
-            &app_state.jwt_encoding_key,
-            refresh_token_exp.clone(),
-        ) {
-            Ok(a) => a,
-            Err(e) => {
-                log::error!("An error occurred while generating refresh_token: {}", e);
-                return build_error_response();
-            }
-        };
+    let refresh_token_exp = now + Duration::days(1);
+    let refresh_token = match generate_token(
+        session.id.as_str(),
+        &app_state.jwt_encoding_key,
+        refresh_token_exp.clone(),
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            log::error!("An error occurred while generating refresh_token: {}", e);
+            return build_error_response();
+        }
+    };
 
-        session.refresh_token = refresh_token;
-        session.refresh_token_expires_at = refresh_token_exp.to_rfc3339();
-        refresh_session = true;
-    }
+    session.refresh_token = refresh_token;
+    session.refresh_token_expires_at = refresh_token_exp.to_rfc3339();
 
-    if !session.is_current_access_token_valid() {
-        let access_token_exp = now + Duration::minutes(15);
-        let access_token = match generate_token(
-            session.id.as_str(),
-            &app_state.jwt_encoding_key,
-            access_token_exp,
-        ) {
-            Ok(a) => a,
-            Err(e) => {
-                log::error!("An error occurred while generating access_token: {}", e);
-                return build_error_response();
-            }
-        };
+    let access_token_exp = now + Duration::minutes(15);
+    let access_token = match generate_token(
+        session.id.as_str(),
+        &app_state.jwt_encoding_key,
+        access_token_exp,
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            log::error!("An error occurred while generating access_token: {}", e);
+            return build_error_response();
+        }
+    };
 
-        session.current_access_token = access_token;
-        session.current_access_token_expires_at = access_token_exp.to_rfc3339();
-        refresh_session = true;
-    }
+    session.current_access_token = access_token;
+    session.current_access_token_expires_at = access_token_exp.to_rfc3339();
 
     if new_session {
         match create_session(&mut *con, &session).await {
@@ -224,7 +227,7 @@ pub async fn login_user(
             }
         };
     } else if refresh_session {
-        match update_session(&mut *con, &session).await {
+        match reset_session(&mut *con, &session).await {
             Ok(_) => (),
             Err(err) => {
                 log::error!("Error attempting update session on database: {}", err);
