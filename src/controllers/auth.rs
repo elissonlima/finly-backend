@@ -42,7 +42,7 @@ where
     let res = rows.get(0).unwrap();
 
     return Ok(Some(User {
-        id: res.id.unwrap(),
+        id: res.id,
         email: res.email.clone(),
         name: res.name.clone(),
         password: res.password.clone(),

@@ -25,75 +25,45 @@ use crate::{
     state,
 };
 
-use super::util::{build_conflict_response, build_error_response};
+use super::{macros, util::build_conflict_response};
 
 pub async fn create_reset_password_request(
     req: web::Json<CreateResetPasswordReq>,
     app_state: web::Data<state::AppState>,
 ) -> HttpResponse {
-    let mut con = match app_state.db.acquire().await {
-        Ok(c) => c,
-        Err(e) => {
-            log::error!(
-                "An error occurred when tried to acquire a db connection from pool: {}",
-                e
-            );
-            return build_error_response();
-        }
-    };
+    let mut con = macros::get_database_connection!(app_state);
+    let email_exists = macros::run_async_unwrap!(
+        check_email_exists(req.email.as_str(), &mut *con),
+        "an error occurred when tried to check if email exists on the db"
+    );
 
-    let _ = match check_email_exists(req.email.as_str(), &mut *con).await {
-        Ok(c) => {
-            //Send CREATED to avoid requests to check whether the email
-            //exists on DB or not.
-            if !c {
-                return HttpResponse::build(StatusCode::CREATED)
-                    .insert_header(ContentType::json())
-                    .body(
-                        json!({
-                        "success": true,
-                        "message": "email sent"
-                        })
-                        .to_string(),
-                    );
-            }
-        }
-        Err(e) => {
-            log::error!(
-                "An error occurred when tried to check if email exists on the db: {}",
-                e
+    //Send CREATED to avoid requests to check whether the email
+    //exists on DB or not.
+    if !email_exists {
+        return HttpResponse::build(StatusCode::CREATED)
+            .insert_header(ContentType::json())
+            .body(
+                json!({
+                "success": true,
+                "message": "email sent"
+                })
+                .to_string(),
             );
-            return build_error_response();
-        }
-    };
+    }
 
     //Check if the email does not have an reset record already created
-    match reset_password::get_reset_password_expiration_if_exists(req.email.as_str(), &mut *con)
-        .await
-    {
-        Ok(exists) => {
-            if let Some(x) = exists {
-                return build_conflict_response(Some(x));
-            }
-        }
-        Err(e) => {
-            log::error!("An error occurred when tried to check if the user has already created an reset password record: {}",
-                e);
-            return build_error_response();
-        }
+    let reset_exists = macros::run_async_unwrap!(
+    reset_password::get_reset_password_expiration_if_exists(req.email.as_str(), &mut *con),
+    "an error occurred when tried to check if the user has already created an reset password record");
+    if let Some(x) = reset_exists {
+        return build_conflict_response(Some(x));
     }
 
     //Create reset password record on DB
-    let rec = match reset_password::create_reset_password(req.email.as_str(), &mut *con).await {
-        Ok(r) => r,
-        Err(e) => {
-            log::error!(
-                "An error occurred when tried to create a reset password record in db: {}",
-                e
-            );
-            return build_error_response();
-        }
-    };
+    let rec = macros::run_async_unwrap!(
+        reset_password::create_reset_password(req.email.as_str(), &mut *con),
+        "an error occurred when tried to create a reset password record in db"
+    );
 
     let exp = match DateTime::parse_from_rfc3339(rec.expires_at.as_str()) {
         Ok(e) => e.with_timezone(&Utc),
@@ -105,26 +75,17 @@ pub async fn create_reset_password_request(
     };
 
     // Create token
-    let token = match generate_token_hs256(rec.id.as_str(), exp) {
-        Ok(t) => t,
-        Err(e) => {
-            log::error!("Error when building token for reset password: {}", e);
-            return build_error_response();
-        }
-    };
+    let token = macros::unwrap_res_or_error!(
+        generate_token_hs256(rec.id.as_str(), exp),
+        "error when building token for reset password"
+    );
 
     //TODO - send password reset link
     let reset_password_link = format!("https://192.168.1.19:3000/password/reset?t={}", token);
-    match send_reset_password_email(req.email.as_str(), reset_password_link.as_str()).await {
-        Ok(_) => {}
-        Err(e) => {
-            log::error!(
-                "An error occurred when tried to send the reset password link throught email: {}",
-                e
-            );
-            return build_error_response();
-        }
-    };
+    macros::run_async_unwrap!(
+        send_reset_password_email(req.email.as_str(), reset_password_link.as_str()),
+        "an error occurred when tried to send the reset password link throught email"
+    );
 
     HttpResponse::build(StatusCode::CREATED)
         .insert_header(ContentType::json())
@@ -141,16 +102,7 @@ pub async fn reset_password_form(
     token: web::Query<ResetPasswordFormReq>,
     app_state: web::Data<state::AppState>,
 ) -> HttpResponse {
-    let mut con = match app_state.db.acquire().await {
-        Ok(c) => c,
-        Err(e) => {
-            log::error!(
-                "An error occurred when tried to acquire a db connection from pool: {}",
-                e
-            );
-            return build_error_response();
-        }
-    };
+    let mut con = macros::get_database_connection!(app_state);
 
     let claims = match verify_token_hs256(token.t.as_str()) {
         Ok(c) => c,
@@ -177,16 +129,10 @@ pub async fn reset_password_form(
         }
     };
 
-    let check_token = match check_reset_password_id(claims.sub.as_str(), &mut *con).await {
-        Ok(c) => c,
-        Err(e) => {
-            log::warn!(
-                "Error while trying to verify the reset password record in db: {}",
-                e
-            );
-            false
-        }
-    };
+    let check_token = macros::run_async_unwrap!(
+        check_reset_password_id(claims.sub.as_str(), &mut *con),
+        "error while trying to verify the reset password record in db"
+    );
 
     if !check_token {
         let path: PathBuf = "/app/html/generic_message.html".parse().unwrap();

@@ -57,7 +57,7 @@ where
     let res = rows.get(0).unwrap();
 
     let session = Session {
-        id: res.id.clone().unwrap(),
+        id: res.id.clone(),
         user_email: res.user_email.clone(),
         created_at: res.created_at.clone(),
         refresh_token: res.refresh_token.clone(),
@@ -97,7 +97,7 @@ where
     let res = rows.get(0).unwrap();
 
     let session = Session {
-        id: res.id.clone().unwrap(),
+        id: res.id.clone(),
         user_email: res.user_email.clone(),
         created_at: res.created_at.clone(),
         refresh_token: res.refresh_token.clone(),
