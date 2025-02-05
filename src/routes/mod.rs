@@ -3,7 +3,9 @@ use actix_web::{middleware::from_fn, web};
 use crate::{
     handlers::{
         auth::*,
-        category::upsert_category,
+        category::{
+            delete_category, delete_subcategory, list_category, upsert_category, upsert_subcategory,
+        },
         html::terms_of_use,
         reset_password::{create_reset_password_request, do_reset_password, reset_password_form},
         session_mgm::{logout_user, ping},
@@ -57,6 +59,10 @@ pub fn category_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/category")
             .wrap(from_fn(auth_middleware))
-            .route("/", web::post().to(upsert_category)),
+            .route("", web::post().to(upsert_category))
+            .route("", web::delete().to(delete_category))
+            .route("", web::get().to(list_category))
+            .route("/sub", web::post().to(upsert_subcategory))
+            .route("/sub", web::delete().to(delete_subcategory)),
     );
 }

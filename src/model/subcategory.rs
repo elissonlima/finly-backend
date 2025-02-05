@@ -1,4 +1,6 @@
-#[derive(sqlx::FromRow, Clone)]
+use serde::Serialize;
+
+#[derive(sqlx::FromRow, Clone, Serialize)]
 pub struct Subcategory {
     pub id: String,
     pub category_id: String,

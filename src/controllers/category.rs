@@ -25,6 +25,7 @@ where
                 color = $4,
                 icon_name = $5,
                 updated_at = $6
+            WHERE is_active = 1 AND user_id = $2
         "#,
         category.id,
         category.user_id,
@@ -41,20 +42,25 @@ where
 }
 
 pub async fn delete_category<'a, T>(
-    category: Category,
+    category_id: &str,
+    user_id: i64,
     con: T,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
 {
+    let now = Utc::now().to_rfc3339();
+
     let _ = sqlx::query!(
         r#"
             UPDATE category
-                SET is_active = 0
-            WHERE id = $1 and user_id = $2;
+                SET is_active = 0,
+                    updated_at = $3
+            WHERE id = $1 and user_id = $2 and is_active = 1
         "#,
-        category.id,
-        category.user_id
+        category_id,
+        user_id,
+        now
     )
     .execute(con)
     .await?;
@@ -83,6 +89,7 @@ where
                 color = $4,
                 icon_name = $5,
                 updated_at = $6
+            WHERE is_active = 1 AND category_id = $2
     "#,
         subcategory.id,
         subcategory.category_id,
@@ -99,20 +106,24 @@ where
 }
 
 pub async fn delete_subcategory<'a, T>(
-    subcategory: Subcategory,
+    subcategory_id: &str,
+    category_id: &str,
     con: T,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
 {
+    let now = Utc::now().to_rfc3339();
     let _ = sqlx::query!(
         r#"
         UPDATE subcategory
-            SET is_active = 0
-        WHERE id = $1 AND category_id = $2;
+            SET is_active = 0, updated_at = $3
+        WHERE id = $1 AND category_id = $2 
+            AND is_active = 1
     "#,
-        subcategory.id,
-        subcategory.category_id
+        subcategory_id,
+        category_id,
+        now
     )
     .execute(con)
     .await?;

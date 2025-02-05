@@ -1,6 +1,7 @@
 use super::subcategory::Subcategory;
+use serde::Serialize;
 
-#[derive(sqlx::FromRow, Clone)]
+#[derive(sqlx::FromRow, Clone, Serialize)]
 pub struct Category {
     pub id: String,
     pub user_id: i64,
