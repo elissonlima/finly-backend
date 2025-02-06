@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::{controllers::auth::GoogleOauthUserInformation, request_types::auth::CreateUserReq};
 
 #[derive(sqlx::Type, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[sqlx(type_name = "auth_type")]
+#[sqlx(rename_all = "UPPERCASE")]
 pub enum AuthType {
     UsernamePassword,
     Google,
@@ -12,15 +14,15 @@ pub enum AuthType {
 
 #[derive(sqlx::FromRow, Clone)]
 pub struct User {
-    pub id: i64,
+    pub id: i32,
     pub email: String,
     pub name: String,
     pub password: Option<String>,
-    pub created_at: String,
+    pub created_at: DateTime<Utc>,
     pub auth_type: AuthType,
     pub google_user_id: Option<String>,
-    pub is_email_verified: i8,
-    pub is_premium: i8,
+    pub is_email_verified: bool,
+    pub is_premium: bool,
 }
 
 impl User {
@@ -30,21 +32,21 @@ impl User {
             email: data.email,
             name: data.name,
             password: None,
-            created_at: Utc::now().to_rfc3339(),
+            created_at: Utc::now(),
             auth_type: AuthType::Google,
             google_user_id: Some(data.sub),
-            is_email_verified: data.email_verified as i8,
-            is_premium: 0,
+            is_email_verified: data.email_verified,
+            is_premium: false,
         }
     }
 
     pub fn from_signup_request(data: CreateUserReq) -> Result<Self, BcryptError> {
         let password = bcrypt::hash(data.password, bcrypt::DEFAULT_COST)?;
         let utc_now: DateTime<Utc> = Utc::now().into();
-        let created_at = utc_now.to_rfc3339();
+        let created_at = utc_now;
         let auth_type = AuthType::UsernamePassword;
-        let is_email_verified = 0;
-        let is_premium = 0;
+        let is_email_verified = true;
+        let is_premium = true;
 
         Ok(User {
             id: -1,

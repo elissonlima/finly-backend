@@ -1,59 +1,63 @@
 -- Definition of main database
+CREATE TYPE auth_type AS ENUM('USERNAMEPASSWORD', 'GOOGLE');
 
-CREATE TABLE user (
-    id INTEGER PRIMARY KEY NOT NULL,
-    email TEXT NOT NULL UNIQUE,
-    name TEXT NOT NULL,
-    password TEXT,
-    created_at TEXT NOT NULL,
-    auth_type TEXT NOT NULL,
-    google_user_id TEXT,
-    is_email_verified INTEGER NOT NULL, -- 0 for false 1 for true
-    is_premium INTEGER NOT NULL -- 0 for false 1 for true
+
+CREATE TABLE "user" (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(320) NOT NULL UNIQUE,
+    name VARCHAR(50) NOT NULL,
+    password VARCHAR(72),
+    created_at TIMESTAMP NOT NULL DEFAULT(now() at time zone 'utc'),
+    auth_type auth_type NOT NULL,
+    google_user_id VARCHAR(255),
+    is_email_verified BOOLEAN NOT NULL DEFAULT false,
+    is_premium BOOLEAN NOT NULL DEFAULT false
 );
-CREATE INDEX idx_user_email ON user (email);
+CREATE INDEX idx_user_email ON "user" (email);
 
 CREATE TABLE reset_password (
-    id TEXT PRIMARY KEY NOT NULL,
-    user_email TEXT NOT NULL,
-    sent_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL,
-    is_password_reset INTEGER NOT NULL
+    id UUID PRIMARY KEY,
+    user_email VARCHAR(320) NOT NULL,
+    sent_at TIMESTAMP NOT NULL DEFAULT(now() at time zone 'utc'),
+    expires_at TIMESTAMP NOT NULL,
+    is_password_reset BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE sessions (
-    id TEXT PRIMARY KEY NOT NULL,
-    user_email TEXT NOT NULL UNIQUE,
-    created_at TEXT NOT NULL,
-    refresh_token TEXT NOT NULL,
-    refresh_token_expires_at TEXT NOT NULL,
-    current_access_token TEXT NOT NULL,
-    current_access_token_expires_at TEXT NOT NULL,
-    FOREIGN KEY(user_email) REFERENCES user(email)
+    id UUID PRIMARY KEY,
+    user_email VARCHAR(320) NOT NULL UNIQUE,
+    created_at TIMESTAMP NOT NULL DEFAULT(now() at time zone 'utc'),
+    refresh_token VARCHAR(1000) NOT NULL,
+    refresh_token_expires_at TIMESTAMP NOT NULL,
+    current_access_token VARCHAR(1000) NOT NULL,
+    current_access_token_expires_at TIMESTAMP NOT NULL,
+    FOREIGN KEY(user_email) REFERENCES "user"(email)
 );
 
 CREATE TABLE category (
-    id TEXT PRIMARY KEY NOT NULL,
+    id UUID PRIMARY KEY,
     user_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    color TEXT NOT NULL,
-    icon_name TEXT NOT NULL,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY(user_id) REFERENCES user(id)
+    name VARCHAR(50) NOT NULL,
+    color VARCHAR(9) NOT NULL,
+    icon_name VARCHAR(50) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT(now() at time zone 'utc'),
+    updated_at TIMESTAMP NOT NULL DEFAULT(now() at time zone 'utc'),
+    FOREIGN KEY(user_id) REFERENCES "user"(id)
 );
+CREATE UNIQUE INDEX category_id_user_id_idx ON category(id, user_id);
+
 
 CREATE TABLE subcategory (
-    id TEXT PRIMARY KEY NOT NULL,
-    category_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    color TEXT NOT NULL,
-    icon_name TEXT NOT NULL,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
+    id UUID PRIMARY KEY,
+    category_id UUID NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    color VARCHAR(9) NOT NULL,
+    icon_name VARCHAR(50) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT(now() at time zone 'utc'),
+    updated_at TIMESTAMP NOT NULL DEFAULT(now() at time zone 'utc'),
     FOREIGN KEY(category_id) REFERENCES category(id)
 );
-
+CREATE UNIQUE INDEX subcategory_id_category_id_idx ON subcategory(id, category_id);
 

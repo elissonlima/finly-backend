@@ -9,7 +9,7 @@ services:
       - ~/code/ssl:/app/ssl
       - ./html:/app/html
     environment:
-      - DATABASE_URL=sqlite:///app/database/main.db
+      - DATABASE_URL=postgres://finly:somefancypassword@localhost:5432/finly
       - JWT_ENC_PATH=/app/ssl/jwt.pem
       - JWT_DEC_PATH=/app/ssl/jwt.pub
       - TLS_KEY_PATH=/app/ssl/priv.key
@@ -19,4 +19,14 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
       - AWS_REGION=us-east-1
-
+  db:
+    image: postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=finly
+      - POSTGRES_PASSWORD=somefancypassword
+      - POSTGRES_DB=finly
+    volumes:
+      - ./.db/pgdata:/var/lib/postgresql/data
+    ports:
+      - 5432:5432

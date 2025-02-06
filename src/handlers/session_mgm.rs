@@ -27,7 +27,7 @@ pub async fn logout_user(req: HttpRequest, app_state: web::Data<state::AppState>
     let mut con = macros::get_database_connection!(app_state);
 
     let _ = macros::run_async_unwrap!(
-        delete_session_by_id(&mut *con, session.id.as_str()),
+        delete_session_by_id(&mut *con, &session.id),
         "an error occurred when tried to delete session"
     );
 

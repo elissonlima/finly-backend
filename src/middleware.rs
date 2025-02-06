@@ -8,6 +8,7 @@ use actix_web::{
 };
 
 use serde_json::json;
+use uuid::Uuid;
 
 use crate::{
     controllers::session_mgm::get_session_by_session_id, jwt::verify_token, state::AppState,
@@ -109,7 +110,17 @@ pub async fn auth_middleware(
         }
     };
 
-    let session = match get_session_by_session_id(&mut *con, claims.sub.as_str())
+    let session_id = match Uuid::parse_str(claims.sub.as_str()) {
+        Ok(s) => s,
+        Err(e) => {
+            log::error!("it wasn't possible to convert uuid from string {}", e);
+            return Err(actix_web::error::ErrorUnauthorized(
+                json!({"success": false, "message": "unauthorized"}).to_string(),
+            ));
+        }
+    };
+
+    let session = match get_session_by_session_id(&mut *con, &session_id)
         .await
         .unwrap_or_else(|e| {
             log::error!("Error trying to get session by id; {}", e);

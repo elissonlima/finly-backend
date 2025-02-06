@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, TimeZone, Utc};
 use uuid::Uuid;
 
 use crate::model::reset_password::ResetPassword;
@@ -8,18 +8,18 @@ pub async fn create_reset_password<'a, T>(
     con: T,
 ) -> Result<ResetPassword, sqlx::error::Error>
 where
-    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+    T: sqlx::Executor<'a, Database = sqlx::Postgres>,
 {
     let now = Utc::now();
     let exp = now + Duration::minutes(30);
-    let id = Uuid::new_v4().to_string();
+    let id = Uuid::new_v4();
 
     let rec = ResetPassword {
         id,
         user_email: String::from(email),
-        sent_at: now.to_rfc3339(),
-        expires_at: exp.to_rfc3339(),
-        is_password_reset: 0,
+        sent_at: now,
+        expires_at: exp,
+        is_password_reset: false,
     };
 
     let _ = sqlx::query!(
@@ -29,8 +29,8 @@ where
     "#,
         rec.id,
         rec.user_email,
-        rec.sent_at,
-        rec.expires_at,
+        rec.sent_at.naive_utc(),
+        rec.expires_at.naive_utc(),
         rec.is_password_reset
     )
     .execute(con)
@@ -44,11 +44,11 @@ pub async fn get_reset_password_expiration_if_exists<'a, T>(
     con: T,
 ) -> Result<Option<String>, sqlx::error::Error>
 where
-    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+    T: sqlx::Executor<'a, Database = sqlx::Postgres>,
 {
     let res = sqlx::query!(
         r#"
-        SELECT expires_at FROM reset_password WHERE user_email = $1 AND is_password_reset = 0;
+        SELECT MAX(expires_at) AS expires_at FROM reset_password WHERE user_email = $1 AND is_password_reset = false;
     "#,
         email
     )
@@ -59,20 +59,8 @@ where
         return Ok(None);
     }
 
-    let mut largest_exp = i64::MIN;
-    for row in res.iter() {
-        let c = string_datetime_to_epoch(row.expires_at.as_str());
-        if c > largest_exp {
-            largest_exp = c;
-        }
-    }
-
-    let exp = match DateTime::from_timestamp(largest_exp, 0) {
-        Some(d) => d.with_timezone(&Utc),
-        None => {
-            return Ok(None);
-        }
-    };
+    let rec = res.first().unwrap();
+    let exp = Utc.from_utc_datetime(&rec.expires_at.unwrap());
 
     if Utc::now().gt(&exp) {
         return Ok(None);
@@ -81,9 +69,9 @@ where
     }
 }
 
-pub async fn check_reset_password_id<'a, T>(id: &str, con: T) -> Result<bool, sqlx::error::Error>
+pub async fn check_reset_password_id<'a, T>(id: &Uuid, con: T) -> Result<bool, sqlx::error::Error>
 where
-    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+    T: sqlx::Executor<'a, Database = sqlx::Postgres>,
 {
     let res = sqlx::query!(
         r#"
@@ -101,18 +89,13 @@ where
     let row = res.get(0).unwrap();
 
     //Token used
-    if row.is_password_reset == 1 {
+    if row.is_password_reset {
         return Ok(false);
     }
 
-    let exp_datetime = match DateTime::parse_from_rfc3339(row.expires_at.as_str()) {
-        Ok(d) => d.with_timezone(&Utc),
-        Err(_) => {
-            return Ok(false);
-        }
-    };
+    let exp = Utc.from_utc_datetime(&row.expires_at);
 
-    if Utc::now().gt(&exp_datetime) {
+    if Utc::now().gt(&exp) {
         return Ok(false);
     }
 
@@ -120,11 +103,11 @@ where
 }
 
 pub async fn get_reset_password_email_valid_id<'a, T>(
-    id: &str,
+    id: &Uuid,
     con: T,
 ) -> Result<Option<String>, sqlx::error::Error>
 where
-    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+    T: sqlx::Executor<'a, Database = sqlx::Postgres>,
 {
     let res = sqlx::query!(
         r#"
@@ -142,31 +125,26 @@ where
     let row = res.get(0).unwrap();
 
     //Token used
-    if row.is_password_reset == 1 {
+    if row.is_password_reset {
         return Ok(None);
     }
 
-    let exp_datetime = match DateTime::parse_from_rfc3339(row.expires_at.as_str()) {
-        Ok(d) => d.with_timezone(&Utc),
-        Err(_) => {
-            return Ok(None);
-        }
-    };
+    let exp = Utc.from_utc_datetime(&row.expires_at);
 
-    if Utc::now().gt(&exp_datetime) {
+    if Utc::now().gt(&exp) {
         return Ok(None);
     }
 
     Ok(Some(String::from(row.user_email.as_str())))
 }
 
-pub async fn toggle_reset_password_flag<'a, T>(id: &str, con: T) -> Result<(), sqlx::error::Error>
+pub async fn toggle_reset_password_flag<'a, T>(id: &Uuid, con: T) -> Result<(), sqlx::error::Error>
 where
-    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+    T: sqlx::Executor<'a, Database = sqlx::Postgres>,
 {
     let _ = sqlx::query!(
         r#"
-        UPDATE reset_password SET is_password_reset = 1 WHERE id = $1;
+        UPDATE reset_password SET is_password_reset = true WHERE id = $1;
     "#,
         id
     )
@@ -174,13 +152,4 @@ where
     .await?;
 
     Ok(())
-}
-
-fn string_datetime_to_epoch(str_datetime: &str) -> i64 {
-    let datetime = match DateTime::parse_from_rfc3339(str_datetime) {
-        Ok(d) => d.with_timezone(&Utc).timestamp() as i64,
-        Err(_) => 0 as i64,
-    };
-
-    datetime
 }

@@ -1,7 +1,11 @@
 -- Definition of main database
 
-DROP TABLE user;
+DROP TABLE subcategory;
+DROP TABLE category;
+
 DROP TABLE reset_password ;
 DROP TABLE sessions;
-DROP TABLE category;
-DROP TABLE subcategory;
+
+DROP TABLE "user";
+
+DROP TYPE auth_type;

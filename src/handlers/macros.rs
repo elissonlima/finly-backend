@@ -112,3 +112,16 @@ macro_rules! unwrap_res_or_error {
 }
 
 pub(crate) use unwrap_res_or_error;
+
+macro_rules! uuid_from_str {
+    ($e: expr) => {
+        match uuid::Uuid::parse_str($e) {
+            Ok(u) => u,
+            Err(e) => {
+                log::error!("can't parse uuid from string: {}", e);
+                return crate::handlers::util::build_error_response();
+            }
+        }
+    };
+}
+pub(crate) use uuid_from_str;

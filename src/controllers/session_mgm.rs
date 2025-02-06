@@ -1,3 +1,6 @@
+use chrono::{TimeZone, Utc};
+use uuid::Uuid;
+
 use crate::model::session::Session;
 
 pub async fn create_session<'a, T>(
@@ -5,7 +8,7 @@ pub async fn create_session<'a, T>(
     session: &Session,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+    T: sqlx::Executor<'a, Database = sqlx::Postgres>,
 {
     let _ = sqlx::query!(
         r#"
@@ -17,11 +20,11 @@ where
         "#,
         session.id,
         session.user_email,
-        session.created_at,
+        session.created_at.naive_utc(),
         session.refresh_token,
-        session.refresh_token_expires_at,
+        session.refresh_token_expires_at.naive_utc(),
         session.current_access_token,
-        session.current_access_token_expires_at
+        session.current_access_token_expires_at.naive_utc()
     )
     .execute(con)
     .await?;
@@ -31,10 +34,10 @@ where
 
 pub async fn get_session_by_session_id<'a, T>(
     con: T,
-    session_id: &str,
+    session_id: &Uuid,
 ) -> Result<Option<Session>, Box<dyn std::error::Error>>
 where
-    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+    T: sqlx::Executor<'a, Database = sqlx::Postgres>,
 {
     let rows = sqlx::query!(
         r#"
@@ -59,11 +62,12 @@ where
     let session = Session {
         id: res.id.clone(),
         user_email: res.user_email.clone(),
-        created_at: res.created_at.clone(),
+        created_at: Utc.from_utc_datetime(&res.created_at),
         refresh_token: res.refresh_token.clone(),
-        refresh_token_expires_at: res.refresh_token_expires_at.clone(),
+        refresh_token_expires_at: Utc.from_utc_datetime(&res.refresh_token_expires_at),
         current_access_token: res.current_access_token.clone(),
-        current_access_token_expires_at: res.current_access_token_expires_at.clone(),
+        current_access_token_expires_at: Utc
+            .from_utc_datetime(&res.current_access_token_expires_at),
     };
 
     Ok(Some(session))
@@ -74,7 +78,7 @@ pub async fn get_session_by_user_email<'a, T>(
     user_email: &str,
 ) -> Result<Option<Session>, Box<dyn std::error::Error>>
 where
-    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+    T: sqlx::Executor<'a, Database = sqlx::Postgres>,
 {
     let rows = sqlx::query!(
         r#"
@@ -99,11 +103,12 @@ where
     let session = Session {
         id: res.id.clone(),
         user_email: res.user_email.clone(),
-        created_at: res.created_at.clone(),
+        created_at: Utc.from_utc_datetime(&res.created_at),
         refresh_token: res.refresh_token.clone(),
-        refresh_token_expires_at: res.refresh_token_expires_at.clone(),
+        refresh_token_expires_at: Utc.from_utc_datetime(&res.refresh_token_expires_at),
         current_access_token: res.current_access_token.clone(),
-        current_access_token_expires_at: res.current_access_token_expires_at.clone(),
+        current_access_token_expires_at: Utc
+            .from_utc_datetime(&res.current_access_token_expires_at),
     };
 
     Ok(Some(session))
@@ -111,10 +116,10 @@ where
 
 pub async fn delete_session_by_id<'a, T>(
     con: T,
-    session_id: &str,
+    session_id: &Uuid,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+    T: sqlx::Executor<'a, Database = sqlx::Postgres>,
 {
     let _ = sqlx::query!(
         r#"
@@ -133,7 +138,7 @@ pub async fn update_session<'a, T>(
     session: &Session,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+    T: sqlx::Executor<'a, Database = sqlx::Postgres>,
 {
     let _ = sqlx::query!(
         r#"
@@ -144,7 +149,7 @@ where
             WHERE id = $3
         "#,
         session.current_access_token,
-        session.current_access_token_expires_at,
+        session.current_access_token_expires_at.naive_utc(),
         session.id
     )
     .execute(con)
@@ -158,7 +163,7 @@ pub async fn reset_session<'a, T>(
     session: &Session,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    T: sqlx::Executor<'a, Database = sqlx::Sqlite>,
+    T: sqlx::Executor<'a, Database = sqlx::Postgres>,
 {
     let _ = sqlx::query!(
         r#"
@@ -171,9 +176,9 @@ where
             WHERE user_email = $6
         "#,
         session.current_access_token,
-        session.current_access_token_expires_at,
+        session.current_access_token_expires_at.naive_utc(),
         session.refresh_token,
-        session.refresh_token_expires_at,
+        session.refresh_token_expires_at.naive_utc(),
         session.id,
         session.user_email
     )

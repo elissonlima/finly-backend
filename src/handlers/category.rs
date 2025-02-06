@@ -3,6 +3,7 @@ use actix_web::{
     web, HttpMessage, HttpRequest, HttpResponse,
 };
 use serde_json::json;
+use sqlx::Acquire;
 
 use crate::{
     controllers::{self, auth::get_user},
@@ -16,7 +17,7 @@ use crate::{
 
 pub async fn upsert_category(
     req: HttpRequest,
-    body: web::Json<UpsertCategoryReq>,
+    body: web::Json<Vec<UpsertCategoryReq>>,
     app_state: web::Data<state::AppState>,
 ) -> HttpResponse {
     let ext = req.extensions();
@@ -27,23 +28,33 @@ pub async fn upsert_category(
         "An error ocurred when tried to get user from database"
     ));
 
-    let cat = Category {
-        id: body.id.clone(),
-        user_id: user.id,
-        name: body.name.clone(),
-        color: body.color.clone(),
-        icon_name: body.icon_name.clone(),
-        subcategories: Vec::new(),
-    };
+    let mut tx =
+        macros::run_async_unwrap!(con.begin(), "could not begin a transaction with database");
+
+    for rec in body.iter() {
+        let cat = Category {
+            id: rec.id,
+            user_id: user.id,
+            name: rec.name.clone(),
+            color: rec.color.clone(),
+            icon_name: rec.icon_name.clone(),
+            subcategories: Vec::new(),
+        };
+
+        macros::run_async_unwrap!(
+            controllers::category::upsert_category(&cat, &mut *tx),
+            "an error occurred when tried to create category"
+        );
+    }
 
     macros::run_async_unwrap!(
-        controllers::category::upsert_category(cat, &mut *con),
-        "an error occurred when tried to create category"
+        tx.commit(),
+        "an error occurred when tried to commit the transaction"
     );
 
     HttpResponse::build(StatusCode::CREATED)
         .insert_header(ContentType::json())
-        .body(json!({"success": true}).to_string())
+        .body(json!({"success": true, "message":"ok"}).to_string())
 }
 
 pub async fn delete_category(
@@ -60,13 +71,13 @@ pub async fn delete_category(
     ));
 
     macros::run_async_unwrap!(
-        controllers::category::delete_category(body.category_id.as_str(), user.id, &mut *con),
+        controllers::category::delete_category(&body.category_id, user.id, &mut *con),
         "an error occurred when tried to update the category"
     );
 
     HttpResponse::build(StatusCode::OK)
         .insert_header(ContentType::json())
-        .body(json!({"success": true}).to_string())
+        .body(json!({"success": true, "message":"ok"}).to_string())
 }
 
 pub async fn upsert_subcategory(
@@ -76,21 +87,21 @@ pub async fn upsert_subcategory(
     let mut con = macros::get_database_connection!(app_state);
 
     let sub = Subcategory {
-        id: body.id.clone(),
-        category_id: body.category_id.clone(),
+        id: body.id,
+        category_id: body.category_id,
         name: body.name.clone(),
         icon_name: body.icon_name.clone(),
         color: body.color.clone(),
     };
 
     macros::run_async_unwrap!(
-        controllers::category::upsert_subcategory(sub, &mut *con),
+        controllers::category::upsert_subcategory(&sub, &mut *con),
         "an error occurred when tried to upsert subcategory"
     );
 
     HttpResponse::build(StatusCode::OK)
         .insert_header(ContentType::json())
-        .body(json!({"success": true}).to_string())
+        .body(json!({"success": true, "message":"ok"}).to_string())
 }
 
 pub async fn delete_subcategory(
@@ -101,8 +112,8 @@ pub async fn delete_subcategory(
 
     macros::run_async_unwrap!(
         controllers::category::delete_subcategory(
-            body.subcategory_id.as_str(),
-            body.category_id.as_str(),
+            &body.subcategory_id,
+            &body.category_id,
             &mut *con
         ),
         "an error occurred when tried to update subcategory record"
@@ -110,7 +121,7 @@ pub async fn delete_subcategory(
 
     HttpResponse::build(StatusCode::OK)
         .insert_header(ContentType::json())
-        .body(json!({"success": true}).to_string())
+        .body(json!({"success": true, "message":"ok"}).to_string())
 }
 
 pub async fn list_category(
@@ -137,7 +148,7 @@ pub async fn list_category(
     let mut res: Vec<Category> = Vec::new();
 
     for mut cat in categories {
-        let sub = subcategories.entry(cat.id.clone()).or_default();
+        let sub = subcategories.entry(cat.id.to_string().clone()).or_default();
         cat.subcategories.extend(sub.to_vec());
         res.push(cat);
     }

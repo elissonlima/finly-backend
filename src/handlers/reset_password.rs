@@ -6,7 +6,6 @@ use actix_web::{
     web::{self},
     HttpResponse,
 };
-use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
 
 use crate::{
@@ -65,18 +64,9 @@ pub async fn create_reset_password_request(
         "an error occurred when tried to create a reset password record in db"
     );
 
-    let exp = match DateTime::parse_from_rfc3339(rec.expires_at.as_str()) {
-        Ok(e) => e.with_timezone(&Utc),
-        Err(_) => {
-            let now = Utc::now();
-            let exp = now + Duration::minutes(30);
-            exp
-        }
-    };
-
     // Create token
     let token = macros::unwrap_res_or_error!(
-        generate_token_hs256(rec.id.as_str(), exp),
+        generate_token_hs256(rec.id.to_string().as_str(), rec.expires_at),
         "error when building token for reset password"
     );
 
@@ -129,8 +119,9 @@ pub async fn reset_password_form(
         }
     };
 
+    let res_id = macros::uuid_from_str!(claims.sub.as_str());
     let check_token = macros::run_async_unwrap!(
-        check_reset_password_id(claims.sub.as_str(), &mut *con),
+        check_reset_password_id(&res_id, &mut *con),
         "error while trying to verify the reset password record in db"
     );
 
@@ -226,7 +217,9 @@ pub async fn do_reset_password(
         }
     };
 
-    let user_email = match get_reset_password_email_valid_id(claims.sub.as_str(), &mut *con).await {
+    let res_id = macros::uuid_from_str!(claims.sub.as_str());
+
+    let user_email = match get_reset_password_email_valid_id(&res_id, &mut *con).await {
         Ok(c) => c,
         Err(e) => {
             log::warn!(
@@ -284,7 +277,7 @@ pub async fn do_reset_password(
     }
 
     //TODO - update reset password status: is_reset_password = 1
-    let _ = match toggle_reset_password_flag(claims.sub.as_str(), &mut *con).await {
+    let _ = match toggle_reset_password_flag(&res_id, &mut *con).await {
         Ok(_) => {}
         Err(e) => {
             log::error!(

@@ -34,10 +34,10 @@ pub async fn refresh_token(
         "it wasn't possible to get TokenClaims from Request Object"
     );
 
-    let session_id = claims.sub.clone();
+    let session_id = macros::uuid_from_str!(claims.sub.as_str());
     let mut db = macros::get_database_connection!(app_state);
     let mut session = macros::unwrap_opt_or_unauthorize!(macros::run_async_unwrap!(
-        get_session_by_session_id(&mut *db, session_id.as_str()),
+        get_session_by_session_id(&mut *db, &session_id),
         "an error ocurred when tried to get session by id"
     ));
 
@@ -51,7 +51,7 @@ pub async fn refresh_token(
 
         let access_token = macros::unwrap_res_or_error!(
             generate_token(
-                session.id.as_str(),
+                session.id.to_string().as_str(),
                 &app_state.jwt_encoding_key,
                 access_token_exp,
             ),
@@ -59,7 +59,7 @@ pub async fn refresh_token(
         );
 
         session.current_access_token = access_token;
-        session.current_access_token_expires_at = access_token_exp.to_rfc3339();
+        session.current_access_token_expires_at = access_token_exp;
 
         macros::run_async_unwrap!(
             update_session(&mut *db, &session),
@@ -73,7 +73,7 @@ pub async fn refresh_token(
             json!({
             "success": true,
             "access_token": session.current_access_token,
-            "access_token_exp": session.current_access_token_expires_at })
+            "access_token_exp": session.current_access_token_expires_at.to_rfc3339()})
             .to_string(),
         )
 }
@@ -123,7 +123,7 @@ pub async fn login_user(
     });
 
     if !new_session {
-        session.id = Uuid::new_v4().to_string();
+        session.id = Uuid::new_v4();
         refresh_session = true;
     }
 
@@ -131,7 +131,7 @@ pub async fn login_user(
     let refresh_token_exp = now + Duration::days(1);
     let refresh_token = macros::unwrap_res_or_error!(
         generate_token(
-            session.id.as_str(),
+            session.id.to_string().as_str(),
             &app_state.jwt_encoding_key,
             refresh_token_exp.clone(),
         ),
@@ -139,12 +139,12 @@ pub async fn login_user(
     );
 
     session.refresh_token = refresh_token;
-    session.refresh_token_expires_at = refresh_token_exp.to_rfc3339();
+    session.refresh_token_expires_at = refresh_token_exp;
 
     let access_token_exp = now + Duration::minutes(15);
     let access_token = macros::unwrap_res_or_error!(
         generate_token(
-            session.id.as_str(),
+            session.id.to_string().as_str(),
             &app_state.jwt_encoding_key,
             access_token_exp,
         ),
@@ -152,7 +152,7 @@ pub async fn login_user(
     );
 
     session.current_access_token = access_token;
-    session.current_access_token_expires_at = access_token_exp.to_rfc3339();
+    session.current_access_token_expires_at = access_token_exp;
 
     if new_session {
         macros::run_async_unwrap!(
@@ -174,15 +174,15 @@ pub async fn login_user(
                     "id": db_user.id,
                     "name": db_user.name,
                     "email": db_user.email,
-                    "created_at": db_user.created_at,
+                    "created_at": db_user.created_at.to_rfc3339(),
                     "auth_type": db_user.auth_type,
                     "is_email_verified": db_user.is_email_verified,
                     "is_premium": db_user.is_premium
                 },
                 "access_token": session.current_access_token,
-                "access_token_exp": session.current_access_token_expires_at,
+                "access_token_exp": session.current_access_token_expires_at.to_rfc3339(),
                 "refresh_token": session.refresh_token,
-                "refresh_token_exp": session.refresh_token_expires_at,
+                "refresh_token_exp": session.refresh_token_expires_at.to_rfc3339(),
                 "success": true})
             .to_string(),
         );
@@ -209,7 +209,7 @@ pub async fn post_new_user(
     );
 
     let _ = macros::run_async_unwrap!(
-        create_user(&mut *con, usr_obj),
+        create_user(&mut *con, &usr_obj),
         "an error occurred when tried to insert user on the database"
     );
 
@@ -292,7 +292,7 @@ pub async fn google_signin(
 
     if new_user {
         let usr_database = macros::run_async_unwrap!(
-            create_user(&mut *con, usr),
+            create_user(&mut *con, &usr),
             "an error ocurred when tried to insert a new user on the database"
         );
         usr = usr_database.clone();
@@ -312,7 +312,7 @@ pub async fn google_signin(
     });
 
     if !new_session {
-        session.id = Uuid::new_v4().to_string();
+        session.id = Uuid::new_v4();
         refresh_session = true;
     }
 
@@ -320,7 +320,7 @@ pub async fn google_signin(
     let refresh_token_exp = now + Duration::days(1);
     let refresh_token = macros::unwrap_res_or_error!(
         generate_token(
-            session.id.as_str(),
+            session.id.to_string().as_str(),
             &app_state.jwt_encoding_key,
             refresh_token_exp.clone(),
         ),
@@ -328,12 +328,12 @@ pub async fn google_signin(
     );
 
     session.refresh_token = refresh_token;
-    session.refresh_token_expires_at = refresh_token_exp.to_rfc3339();
+    session.refresh_token_expires_at = refresh_token_exp;
 
     let access_token_exp = now + Duration::minutes(15);
     let access_token = macros::unwrap_res_or_error!(
         generate_token(
-            session.id.as_str(),
+            session.id.to_string().as_str(),
             &app_state.jwt_encoding_key,
             access_token_exp,
         ),
@@ -341,7 +341,7 @@ pub async fn google_signin(
     );
 
     session.current_access_token = access_token;
-    session.current_access_token_expires_at = access_token_exp.to_rfc3339();
+    session.current_access_token_expires_at = access_token_exp;
 
     if new_session {
         macros::run_async_unwrap!(
@@ -367,15 +367,15 @@ pub async fn google_signin(
                     "id": usr.id,
                     "name": usr.name,
                     "email": usr.email,
-                    "created_at": usr.created_at,
+                    "created_at": usr.created_at.to_rfc3339(),
                     "auth_type": usr.auth_type,
                     "is_email_verified": usr.is_email_verified,
                     "is_premium": usr.is_premium
                 },
                 "access_token": session.current_access_token,
-                "access_token_exp": session.current_access_token_expires_at,
+                "access_token_exp": session.current_access_token_expires_at.to_rfc3339(),
                 "refresh_token": session.refresh_token,
-                "refresh_token_exp": session.refresh_token_expires_at,
+                "refresh_token_exp": session.refresh_token_expires_at.to_rfc3339(),
                 "success": true})
             .to_string(),
         )

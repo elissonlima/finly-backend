@@ -30,9 +30,8 @@ RUN rm src/*.rs
 COPY ./src ./src
 
 # build for release
-RUN mkdir /database
-COPY ./.db/main.db /database
-ENV DATABASE_URL sqlite:///database/main.db
+#RUN mkdir /database
+ENV DATABASE_URL postgres://finly:somefancypassword@finly-backend-db-1:5432/finly
 RUN rm ./target/release/deps/finly_backend*
 RUN cargo build --release
 
