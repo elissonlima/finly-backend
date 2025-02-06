@@ -124,4 +124,33 @@ macro_rules! uuid_from_str {
         }
     };
 }
+
 pub(crate) use uuid_from_str;
+
+macro_rules! begin_transaction {
+    ($e: expr) => {
+        match $e.begin().await {
+            Ok(tx) => tx,
+            Err(e) => {
+                log::error!("can't begin transaction: {}", e);
+                return crate::handlers::util::build_error_response();
+            }
+        }
+    };
+}
+
+pub(crate) use begin_transaction;
+
+macro_rules! commit_transaction {
+    ($e: expr) => {
+        match $e.commit().await {
+            Ok(_) => (),
+            Err(e) => {
+                log::error!("can't commit transaction: {}", e);
+                return crate::handlers::util::build_error_response();
+            }
+        }
+    };
+}
+
+pub(crate) use commit_transaction;
