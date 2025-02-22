@@ -61,3 +61,28 @@ CREATE TABLE subcategory (
 );
 CREATE UNIQUE INDEX subcategory_id_category_id_idx ON subcategory(id, category_id);
 
+CREATE TABLE credit_card(
+    id UUID PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    icon_name varchar(50) NOT NULL,
+    limit_value BIGINT NOT NULL,
+    closing_day SMALLINT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT(now() at time zone 'utc'),
+    updated_at TIMESTAMP NOT NULL DEFAULT(now() at time zone 'utc'),
+    FOREIGN KEY(user_id) REFERENCES "user"(id)
+);
+CREATE UNIQUE INDEX credit_card_id_user_id_idx ON credit_card(id, user_id);
+
+CREATE TABLE credit_card_bill(
+    id UUID PRIMARY KEY,
+    credit_card_id UUID NOT NULL,
+    start_at TIMESTAMP NOT NULL,
+    end_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT(now() at time zone 'utc'),
+    updated_at TIMESTAMP NOT NULL DEFAULT(now() at time zone 'utc'),
+    FOREIGN KEY(credit_card_id) REFERENCES credit_card(id)
+);
+CREATE UNIQUE INDEX credit_card_bill_id_credit_card_id_idx ON credit_card_bill(id, credit_card_id);
+

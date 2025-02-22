@@ -13,7 +13,7 @@ impl DbConnection {
             }
         };
 
-        log::info!("Created connection pool for Sqlite {db_url}");
+        log::info!("Created connection pool for Postgres");
         Self { pool }
     }
 }

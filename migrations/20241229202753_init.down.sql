@@ -1,4 +1,6 @@
 -- Definition of main database
+DROP TABLE credit_card_bill;
+DROP TABLE credit_card;
 
 DROP TABLE subcategory;
 DROP TABLE category;

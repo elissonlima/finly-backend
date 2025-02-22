@@ -71,6 +71,7 @@ async fn main() -> io::Result<()> {
             .configure(routes::html_routes)
             .configure(routes::reset_password_routes)
             .configure(routes::category_routes)
+            .configure(routes::credit_card_routes)
     };
 
     HttpServer::new(app)

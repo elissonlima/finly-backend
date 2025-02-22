@@ -43,6 +43,20 @@ macro_rules! run_async_unwrap {
 
 pub(crate) use run_async_unwrap;
 
+macro_rules! run_async_or {
+    ($e: expr, $and_e: expr) => {
+        match $e.await {
+            Ok(d) => d,
+            Err(e) => {
+                log::warn!("An error was captured: {}", e);
+                $and_e
+            }
+        }
+    };
+}
+
+pub(crate) use run_async_or;
+
 macro_rules! unwrap_opt_or_unauthorize {
     ($e:expr) => {
         match $e {

@@ -1,3 +1,5 @@
+use std::usize;
+
 use actix_web::{
     http::{header::ContentType, StatusCode},
     HttpResponse,
@@ -31,4 +33,34 @@ pub fn build_method_not_allowed(message: Option<String>) -> HttpResponse {
     HttpResponse::build(StatusCode::METHOD_NOT_ALLOWED)
         .insert_header(ContentType::json())
         .body(json!({"success": false, "message": res_msg}).to_string())
+}
+
+pub fn build_status_code_for_multiple_input(
+    in_len: usize,
+    error_len: usize,
+    message: &mut String,
+    success: &mut bool,
+) -> StatusCode {
+    let status_code = match error_len.cmp(&in_len) {
+        std::cmp::Ordering::Less => {
+            if error_len == 0 {
+                StatusCode::CREATED
+            } else {
+                *message = "partial".to_string();
+                StatusCode::MULTI_STATUS
+            }
+        }
+        std::cmp::Ordering::Equal => {
+            *message = "error".to_string();
+            *success = false;
+            StatusCode::BAD_REQUEST
+        }
+        std::cmp::Ordering::Greater => {
+            *message = "error".to_string();
+            *success = false;
+            StatusCode::BAD_REQUEST
+        }
+    };
+
+    status_code
 }

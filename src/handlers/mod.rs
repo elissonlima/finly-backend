@@ -1,7 +1,9 @@
 pub mod auth;
 pub mod category;
+pub mod credit_card;
 pub mod html;
 pub mod macros;
 pub mod reset_password;
 pub mod session_mgm;
+pub mod static_content;
 pub mod util;
