@@ -86,6 +86,11 @@ pub fn credit_card_routes(cfg: &mut web::ServiceConfig) {
             .route("", web::delete().to(delete_credit_card))
             .route("", web::get().to(list_credit_card))
             .route("/bill", web::get().to(list_credit_card_bills))
-            .route("bill_of_date", web::post().to(create_bill_of_date)),
+            .route("bill_of_date", web::post().to(create_bill_of_date))
+            .service(
+                fs::Files::new("/icons", "./card_icons")
+                    .files_listing_renderer(file_list_handler)
+                    .show_files_listing(),
+            ),
     );
 }
