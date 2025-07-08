@@ -1,5 +1,5 @@
 use actix_files::Directory;
-use actix_web::{dev::ServiceResponse, HttpRequest, HttpResponse};
+use actix_web::{dev::ServiceResponse, http::header::ContentType, HttpRequest, HttpResponse};
 use regex::Regex;
 use serde_json::json;
 
@@ -53,5 +53,19 @@ pub fn file_list_handler(
     Ok(ServiceResponse::new(
         req.clone(),
         HttpResponse::Ok().body(json!(files).to_string()),
+    ))
+}
+
+pub fn card_icon_list_handler(
+    _dir: &Directory,
+    req: &HttpRequest,
+) -> Result<ServiceResponse, std::io::Error> {
+    let file_content =
+        std::fs::read_to_string("card_icons/icon_colors.json").unwrap_or_else(|_| "{}".to_string());
+    Ok(ServiceResponse::new(
+        req.clone(),
+        HttpResponse::Ok()
+            .content_type(ContentType::json())
+            .body(file_content),
     ))
 }

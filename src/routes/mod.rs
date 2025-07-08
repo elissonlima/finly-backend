@@ -14,7 +14,7 @@ use crate::{
         html::terms_of_use,
         reset_password::{create_reset_password_request, do_reset_password, reset_password_form},
         session_mgm::{logout_user, ping},
-        static_content::file_list_handler,
+        static_content::{card_icon_list_handler, file_list_handler},
     },
     middleware::{auth_middleware, refresh_token_middleware},
 };
@@ -89,7 +89,7 @@ pub fn credit_card_routes(cfg: &mut web::ServiceConfig) {
             .route("bill_of_date", web::post().to(create_bill_of_date))
             .service(
                 fs::Files::new("/icons", "./card_icons")
-                    .files_listing_renderer(file_list_handler)
+                    .files_listing_renderer(card_icon_list_handler)
                     .show_files_listing(),
             ),
     );
