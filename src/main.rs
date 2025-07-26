@@ -2,6 +2,7 @@ mod app_state;
 mod args;
 mod controller;
 mod handler;
+mod jwt;
 mod model;
 mod route;
 
@@ -36,24 +37,24 @@ async fn main() -> std::io::Result<()> {
 
     // JWT Keys
     let jwt_enc_key = EncodingKey::from_rsa_pem(
-        &std::fs::read(args.jwt_en_key).expect("Could not load JWT Encoding Key from File")
-    ).expect("It wasn't possible to create the JWT encoding key");
+        &std::fs::read(args.jwt_en_key).expect("Could not load JWT Encoding Key from File"),
+    )
+    .expect("It wasn't possible to create the JWT encoding key");
     let jwt_dec_key = DecodingKey::from_rsa_pem(
-        &std::fs::read(args.jwt_de_key).expect("Could not load JWT Decoding Key from File")
-    ).expect("It wasn't possible to create the JWT decoding key");
+        &std::fs::read(args.jwt_de_key).expect("Could not load JWT Decoding Key from File"),
+    )
+    .expect("It wasn't possible to create the JWT decoding key");
 
     // App State
-    let app_state = web::Data::new(
-        AppState {
-            pool,
-            jwt_encoding_key: jwt_enc_key,
-            jwt_decoding_key: jwt_dec_key
-        }
-    );
+    let app_state = web::Data::new(AppState {
+        pool,
+        jwt_encoding_key: jwt_enc_key,
+        jwt_decoding_key: jwt_dec_key,
+    });
 
     // load TLS keys
-    let mut ssl_builder = SslAcceptor::mozilla_intermediate(SslMethod::tls())
-        .expect("Couldn't created SSL Builder");
+    let mut ssl_builder =
+        SslAcceptor::mozilla_intermediate(SslMethod::tls()).expect("Couldn't created SSL Builder");
 
     ssl_builder
         .set_private_key_file(args.tls_key, SslFiletype::PEM)

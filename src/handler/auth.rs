@@ -3,16 +3,17 @@ use actix_web::{
     http::{StatusCode, header::ContentType},
     web,
 };
+use chrono::{DateTime, Duration, Utc};
 use reqwest::header::{AUTHORIZATION, HeaderValue};
 use serde::Deserialize;
 use serde_json::json;
 
 use crate::{
-    app_state::{self, AppState},
+    app_state::AppState,
     controller::AuthController,
     handler::macros,
-    model::User,
-    route::auth,
+    jwt::generate_token,
+    model::{self, Account},
 };
 
 #[derive(Deserialize)]
@@ -62,24 +63,91 @@ pub async fn google_signin(
     );
 
     let auth_controller = AuthController::new(&app_state.pool);
-    let user = macros::unwrap_res_or_error!(
-        auth_controller
-            .create_user(&user_info.email, &user_info.name)
-            .await,
-        "An error occurred while trying to create the user on the database"
+
+    // Try to get user from database
+    let user_q = macros::unwrap_res_or_error!(
+        auth_controller.get_user(&user_info.email).await,
+        "An error occurred while trying to retrieve the user from the database"
     );
-    let account = macros::unwrap_res_or_error!(
+
+    // Create user if it doesn't exists on database
+    let user = match user_q {
+        Some(u) => u,
+        None => {
+            macros::unwrap_res_or_error!(
+                auth_controller
+                    .create_user(&user_info.email, &user_info.name)
+                    .await,
+                "An error occurred while trying to create the user on the database"
+            )
+        }
+    };
+
+    let account_q = macros::unwrap_res_or_error!(
         auth_controller
-            .create_account(user.id, "GOOGLE", &user_info.id)
+            .get_account(user.id, model::AccountProvider::Google)
             .await,
-        "An error occurred while trying to create the account on the database"
+        "An error occurred while trying to retrieve the acount from the database"
+    );
+
+    let account = match account_q {
+        Some(a) => a,
+        None => {
+            macros::unwrap_res_or_error!(
+                auth_controller
+                    .create_account(user.id, model::AccountProvider::Google, &user_info.id)
+                    .await,
+                "An error occurred while trying to create the account on the database"
+            )
+        }
+    };
+
+    let now: DateTime<Utc> = Utc::now().into();
+    let access_token_exp = now + Duration::minutes(15);
+    let access_token = macros::unwrap_res_or_error!(
+        generate_token(&user.email, &app_state.jwt_encoding_key, access_token_exp),
+        "an error occurred while trying to generate jwt token"
+    );
+    let refresh_token_exp = now + Duration::days(90);
+    let refresh_token = macros::unwrap_res_or_error!(
+        generate_token(&user.email, &app_state.jwt_encoding_key, refresh_token_exp),
+        "an error occurred while trying to generate jwt token"
+    );
+
+    let account_updated = Account {
+        id: account.id,
+        user_id: account.user_id,
+        provider: account.provider,
+        provider_user_id: account.provider_user_id,
+        access_token: Some(access_token),
+        access_token_expires_at: Some(access_token_exp),
+        refresh_token: Some(refresh_token),
+        refresh_token_expires_at: Some(refresh_token_exp),
+    };
+
+    macros::unwrap_res_or_error!(
+        auth_controller
+            .update_account_tokens(&account_updated)
+            .await,
+        "An error occurred while trying to update the account tokens on database"
     );
 
     HttpResponse::build(StatusCode::OK)
         .insert_header(ContentType::json())
         .body(
             json!({
-                "msg": "Hello, World!"
+                "user" : {
+                    "id" : user.id,
+                    "email": user.email,
+                    "name": user.name,
+                    "is_premium": user.is_premium
+                },
+                "account" : {
+                    "access_token": account_updated.access_token,
+                    "access_token_expires_at": account_updated.access_token_expires_at,
+                    "refresh_token" : account_updated.refresh_token,
+                    "refresh_token_expires_at": account_updated.refresh_token_expires_at
+                }
             })
             .to_string(),
         )
