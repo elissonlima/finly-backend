@@ -1,3 +1,5 @@
 mod auth;
+mod macros;
 
-pub use auth::auth_login;
+pub use auth::google_signin;
+
