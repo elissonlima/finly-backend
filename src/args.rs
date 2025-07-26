@@ -4,7 +4,7 @@ use clap::Parser;
 #[command(version, about, long_about = None)]
 pub struct Args {
     // Database File Path
-    #[arg(short('d'), long)]
+    #[arg(short('u'), long)]
     pub dburl: String,
 
     //JWT Encoding Key File Path
