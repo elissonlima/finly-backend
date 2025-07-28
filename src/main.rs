@@ -3,6 +3,7 @@ mod args;
 mod controller;
 mod handler;
 mod jwt;
+mod middleware;
 mod model;
 mod route;
 
@@ -70,6 +71,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default())
             .wrap(Compress::default())
             .configure(route::auth)
+            .configure(route::chat)
     };
 
     HttpServer::new(app)

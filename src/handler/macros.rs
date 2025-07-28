@@ -17,12 +17,12 @@ macro_rules! get_database_connection {
 
 pub(crate) use get_database_connection;
 
-macro_rules! unwrap_res_or_error {
-    ($e:expr, $log_err_msg:literal) => {
-        match $e {
-            Ok(s) => s,
-            Err(e) => {
-                log::error!("{}: {}", $log_err_msg, e);
+macro_rules! get_user_id {
+    ($e:expr) => {
+        match $e.get::<i32>() {
+            Some(c) => c,
+            None => {
+                log::error!("Could not retrieve User ID from request object");
                 return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
                 .insert_header(ContentType::json())
                 .body(json!({"error": "internal server error"}).to_string());
@@ -31,20 +31,32 @@ macro_rules! unwrap_res_or_error {
     };
 }
 
-pub(crate) use unwrap_res_or_error;
+pub(crate) use get_user_id;
 
-macro_rules! unwrap_res_or_bad_request {
-    ($e:expr, $log_err_msg:literal) => {
+macro_rules! unwrap_res_and_error {
+    ($e:expr, $app_err:expr, $log_err_msg:literal) => {
         match $e {
             Ok(s) => s,
             Err(e) => {
-                log::warn!("{}: {}", $log_err_msg, e);
-                return HttpResponse::build(StatusCode::BAD_REQUEST)
-                .insert_header(ContentType::json())
-                .body(json!({"error": "bad request"}).to_string());
+                log::error!("{}: {}", $log_err_msg, e);
+                return Err($app_err);
             }
         }
     };
 }
 
-pub(crate) use unwrap_res_or_bad_request;
+pub(crate) use unwrap_res_and_error;
+
+macro_rules! unwrap_res_and_warn {
+    ($e:expr, $app_err:expr, $log_err_msg:literal) => {
+        match $e {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("{}: {}", $log_err_msg, e);
+                return Err($app_err);
+            }
+        }
+    };
+}
+
+pub(crate) use unwrap_res_and_warn;

@@ -770,6 +770,7 @@ dependencies = [
  "actix-web",
  "chrono",
  "clap",
+ "derive_more",
  "env_logger",
  "futures",
  "jsonwebtoken",
