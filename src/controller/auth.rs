@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 
 use crate::model::{Account, AccountProvider, User};
@@ -131,6 +132,30 @@ impl<'a> AuthController<'a> {
         };
 
         return Ok(Some(acc));
+    }
+
+    pub async fn get_accounts(&self, user_id: &i32) -> Result<Vec<Account>, sqlx::Error> {
+        let rec = sqlx::query_as!(
+            Account,
+            r#"
+                SELECT 
+                    "id",
+                    "user_id",
+                    "provider" as "provider!: AccountProvider",
+                    "provider_user_id",
+                    "access_token",
+                    "access_token_expires_at",
+                    "refresh_token",
+                    "refresh_token_expires_at"
+                FROM "account"
+                WHERE "user_id" = $1
+            "#,
+            user_id
+        )
+        .fetch_all(self.db_conn)
+        .await?;
+
+        return Ok(rec);
     }
 
     pub async fn update_account_tokens(&self, account: &Account) -> Result<(), sqlx::Error> {

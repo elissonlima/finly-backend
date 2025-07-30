@@ -76,6 +76,7 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(app)
         .bind_openssl("0.0.0.0:8080", ssl_builder)?
+        //.bind("0.0.0.0:8080")?
         .workers(1)
         .run()
         .await
