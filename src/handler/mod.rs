@@ -1,6 +1,6 @@
 mod auth;
 mod chat;
-mod errors;
+mod error;
 mod macros;
 
 pub use auth::google_signin;

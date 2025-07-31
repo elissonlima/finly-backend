@@ -2,6 +2,8 @@ use actix_web::{HttpResponse, error, http::StatusCode};
 use derive_more::{Display, Error};
 use serde::{Deserialize, Serialize};
 
+use crate::controller;
+
 #[derive(Debug, Display, Error, Serialize, Deserialize)] // Derive Serialize and Deserialize
 #[serde(rename_all = "snake_case")]
 pub enum AppError {
@@ -51,5 +53,11 @@ impl error::ResponseError for AppError {
         HttpResponse::build(status_code)
             .insert_header(actix_web::http::header::ContentType::json())
             .json(error_response)
+    }
+}
+
+impl From<controller::error::GoogleControllerError> for AppError {
+    fn from(_err: controller::error::GoogleControllerError) -> Self {
+        AppError::InternalServerError
     }
 }

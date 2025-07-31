@@ -4,9 +4,7 @@ macro_rules! get_user_id {
             Some(c) => c,
             None => {
                 log::error!("Could not retrieve User ID from request object");
-                return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-                .insert_header(ContentType::json())
-                .body(json!({"error": "internal server error"}).to_string());
+                return Err(AppError::Unauthorized);
             }
         }
     };

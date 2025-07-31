@@ -1,109 +1,25 @@
-use std::{collections::BTreeMap, fs};
+use std::{collections::BTreeMap};
 
 use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
-use serde::{Deserialize, Serialize};
 use serde_json::json;
+
+use crate::{controller::error::GoogleControllerError, model::{Claims, GoogleServiceToken, GoogleServiceTokenApiResponse, LLMResponse, ServiceAccountKey}};
 
 const PROJECT_ID: &str = "finlydigital-dev";
 const LOCATION_ID: &str = "global";
 const API_ENDPOINT: &str = "aiplatform.googleapis.com";
 const MODEL_ID: &str = "gemini-2.5-flash";
 const GENERATE_CONTENT_API: &str = "streamGenerateContent";
-const SERVICE_ACCOUNT_KEY: &str = "/home/elisson/finlydigital-dev-661f325a3dc1.json";
 
-// --- Data Structures for Service Account Key ---
-#[derive(Debug, Deserialize)]
-struct ServiceAccountKey {
-    #[serde(rename = "type")]
-    key_type: String,
-    project_id: String,
-    private_key_id: String,
-    private_key: String,
-    client_email: String,
-    client_id: String,
-    auth_uri: String,
-    token_uri: String,
-    auth_provider_x509_cert_url: String,
-    client_x509_cert_url: String,
-    universe_domain: Option<String>,
+pub fn is_google_access_token_expired(token: &GoogleServiceToken) -> bool {
+    let now = Utc::now();
+    return now >= token.expires_at;
 }
 
-#[derive(Debug, Serialize)]
-struct Claims {
-    iss: String,   // Issuer (client_email)
-    scope: String, // Scopes requested
-    aud: String,   // Audience (token_uri)
-    exp: i64,      // Expiration time
-    iat: i64,      // Issued at time
-}
-
-#[derive(Debug, Deserialize)]
-struct TokenResponse {
-    access_token: String,
-    token_type: String,
-    expires_in: u32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct LLMResponseCandidatePart {
-    pub text: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct LLMResponseCandidateContent {
-    pub role: String,
-    pub parts: Vec<LLMResponseCandidatePart>,
-    #[serde(rename = "finishReason")]
-    pub finish_reason: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct LLMResponseCandidate {
-    pub content: LLMResponseCandidateContent,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct LLMResponseUsageMetadataTokensDetails {
-    pub modality: String,
-    #[serde(rename = "tokenCount")]
-    pub token_count: i32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct LLMResponseUsageMetadata {
-    #[serde(rename = "promptTokenCount")]
-    pub prompt_token_count: Option<i32>,
-    #[serde(rename = "candidatesTokenCount")]
-    pub candidates_token_count: Option<i32>,
-    #[serde(rename = "totalTokenCount")]
-    pub total_token_count: Option<i32>,
-    #[serde(rename = "trafficType")]
-    pub traffic_type: String,
-    #[serde(rename = "promptTokenDetails")]
-    pub prompt_token_details: Option<Vec<LLMResponseUsageMetadataTokensDetails>>,
-    #[serde(rename = "candidatesTokensDetails")]
-    pub candidates_tokens_details: Option<Vec<LLMResponseUsageMetadataTokensDetails>>,
-    #[serde(rename = "thoughtsTokenCount")]
-    pub thoughts_token_count: Option<i32>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct LLMResponse {
-    pub candidates: Vec<LLMResponseCandidate>,
-    #[serde(rename = "usageMetadata")]
-    pub usage_metadata: LLMResponseUsageMetadata,
-    #[serde(rename = "modelVersion")]
-    pub model_version: String,
-    #[serde(rename = "createTime")]
-    pub create_time: String,
-    #[serde(rename = "responseId")]
-    pub response_id: String,
-}
-
-async fn get_access_token() -> Result<String, Box<dyn std::error::Error>> {
-    let key_json = fs::read_to_string(SERVICE_ACCOUNT_KEY)?;
-    let key: ServiceAccountKey = serde_json::from_str(&key_json)?;
+pub async fn get_access_token(
+    key: &ServiceAccountKey
+) -> Result<GoogleServiceToken, GoogleControllerError> {
 
     let now = Utc::now();
     let claims = Claims {
@@ -123,7 +39,7 @@ async fn get_access_token() -> Result<String, Box<dyn std::error::Error>> {
     params.insert("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer");
     params.insert("assertion", &jwt);
 
-    let token_res: TokenResponse = client
+    let token_res: GoogleServiceTokenApiResponse = client
         .post(&key.token_uri)
         .form(&params)
         .send()
@@ -132,23 +48,23 @@ async fn get_access_token() -> Result<String, Box<dyn std::error::Error>> {
         .json()
         .await?;
 
-    Ok(token_res.access_token)
+    let now = Utc::now();
+    let expires_at = now + Duration::seconds(token_res.expires_in as i64);
+
+
+    Ok(GoogleServiceToken { 
+        access_token: token_res.access_token,
+        token_type: token_res.token_type,
+        expires_at
+    })
 }
 
-pub async fn exec_prompt(user_text: &str) -> Result<Option<Vec<LLMResponse>>, reqwest::Error> {
+pub async fn exec_prompt(
+    user_text: &str,
+    service_token: &GoogleServiceToken
+) -> Result<Option<Vec<LLMResponse>>, GoogleControllerError> {
     let prompt_text = build_prompt(user_text);
     let system_instructions = get_system_instructions();
-
-    let access_token = match get_access_token().await {
-        Ok(a) => a,
-        Err(e) => {
-            log::error!(
-                "An error occurred while trying to get access for google api request: {}",
-                e
-            );
-            return Ok(None);
-        }
-    };
 
     let client = reqwest::Client::new();
     let url = format!(
@@ -161,7 +77,7 @@ pub async fn exec_prompt(user_text: &str) -> Result<Option<Vec<LLMResponse>>, re
     );
     let response = client
         .post(url)
-        .header("Authorization", format!("Bearer {}", access_token))
+        .header("Authorization", format!("Bearer {}", service_token.access_token))
         .header(
             reqwest::header::CONTENT_TYPE,
             "application/json; charset=utf-8",
@@ -213,11 +129,9 @@ pub async fn exec_prompt(user_text: &str) -> Result<Option<Vec<LLMResponse>>, re
         .await?;
 
     if !response.status().is_success() {
-        println!("OH NO");
-        println!("Response status: {}", response.status().as_u16());
-        let res_text = response.text().await?;
-        println!("Body: {}", res_text);
-        return Ok(None);
+        let status_code = response.status().as_u16();
+        let res_body = response.text().await.unwrap_or_default();
+        return Err(GoogleControllerError::HttpRequestError(API_ENDPOINT.to_string(), status_code, res_body));
     }
 
     let response_text: Vec<LLMResponse> = response.json().await?;

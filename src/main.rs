@@ -7,6 +7,8 @@ mod middleware;
 mod model;
 mod route;
 
+use std::{fs, sync::Mutex};
+
 use actix_web::{
     App, HttpServer,
     middleware::{Compress, Logger},
@@ -18,7 +20,7 @@ use jsonwebtoken::{DecodingKey, EncodingKey};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use sqlx::PgPool;
 
-use crate::app_state::AppState;
+use crate::{app_state::AppState, controller::get_access_token, model::ServiceAccountKey};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -46,11 +48,22 @@ async fn main() -> std::io::Result<()> {
     )
     .expect("It wasn't possible to create the JWT decoding key");
 
+    //Load Google Service Account Key
+    let key_json = fs::read_to_string(args.google_key)
+        .expect("It wasn't possible to load Google Service Key File");
+    let google_key: ServiceAccountKey = serde_json::from_str(&key_json)
+        .expect("Error while trying convert Google Service Key from string");
+    let google_service_token = get_access_token(&google_key)
+        .await
+        .expect("Could not retrive the google service access token");
+
     // App State
     let app_state = web::Data::new(AppState {
         pool,
         jwt_encoding_key: jwt_enc_key,
         jwt_decoding_key: jwt_dec_key,
+        google_service_token: Mutex::new(google_service_token),
+        google_service_key: google_key
     });
 
     // load TLS keys

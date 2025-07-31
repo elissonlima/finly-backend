@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 
 use crate::model::{Account, AccountProvider, User};

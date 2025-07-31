@@ -9,8 +9,8 @@ use std::fmt::Write;
 use uuid::Uuid;
 
 use crate::{
-    app_state, controller,
-    handler::{errors::AppError, macros},
+    app_state, controller::{self, get_access_token, is_google_access_token_expired},
+    handler::{error::AppError, macros},
 };
 
 #[derive(Serialize)]
@@ -30,9 +30,21 @@ pub async fn message_recv(
     app_state: web::Data<app_state::AppState>,
 ) -> Result<HttpResponse, AppError> {
     let ext = req.extensions();
-    //let user_id = macros::get_user_id!(ext);
+    let _user_id = macros::get_user_id!(ext);
 
-    let llm_res = match controller::exec_prompt(&body.msg).await {
+    let mut service_token = app_state.google_service_token.lock().unwrap();
+    log::info!("Current expiration: {}; Is expired? {}", service_token.expires_at, is_google_access_token_expired(&service_token));
+    if is_google_access_token_expired(&service_token) {
+        let n_token =  get_access_token(&app_state.google_service_key).await?;
+        service_token.access_token = n_token.access_token;
+        //service_token.expires_at = n_token.expires_in;
+        service_token.token_type = n_token.token_type;
+    }
+
+    let llm_res = match controller::exec_prompt(
+        &body.msg,
+        &service_token
+    ).await {
         Ok(l) => l.unwrap_or_default(),
         Err(e) => {
             log::error!("An error occurred while trying to reach google API: {}", e);

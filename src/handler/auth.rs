@@ -11,7 +11,7 @@ use serde_json::json;
 use crate::{
     app_state::AppState,
     controller::AuthController,
-    handler::{errors::AppError, macros},
+    handler::{error::AppError, macros},
     jwt::{generate_token, verify_token},
     model::{self, Account},
 };
@@ -22,6 +22,7 @@ pub struct GoogleSignInReq {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct UserInfo {
     pub id: String,
     pub email: String,
@@ -195,7 +196,7 @@ pub async fn refresh_token(
     }
 
     let claims = macros::unwrap_res_or_app_err_log_warn!(
-        verify_token(token.clone(), &app_state.jwt_decoding_key),
+        verify_token(&token, &app_state.jwt_decoding_key),
         AppError::Unauthorized,
         "Error trying to verify the token"
     );
