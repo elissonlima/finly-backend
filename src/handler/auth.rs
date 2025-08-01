@@ -11,7 +11,7 @@ use serde_json::json;
 use crate::{
     app_state::AppState,
     controller::AuthController,
-    handler::{error::AppError, macros},
+    handler::{errors::AppError, macros},
     jwt::{generate_token, verify_token},
     model::{self, Account},
 };

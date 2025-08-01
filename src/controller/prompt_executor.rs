@@ -4,7 +4,7 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde_json::json;
 
-use crate::{controller::error::GoogleControllerError, model::{Claims, GoogleServiceToken, GoogleServiceTokenApiResponse, LLMResponse, ServiceAccountKey}};
+use crate::{controller::errors::GoogleControllerError, model::{Claims, GoogleServiceToken, GoogleServiceTokenApiResponse, LLMResponse, ServiceAccountKey}};
 
 const PROJECT_ID: &str = "finlydigital-dev";
 const LOCATION_ID: &str = "global";

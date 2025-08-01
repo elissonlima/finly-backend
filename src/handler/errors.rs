@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, error, http::StatusCode};
+use actix_web::{error, http::StatusCode, HttpResponse};
 use derive_more::{Display, Error};
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +11,8 @@ pub enum AppError {
     Unauthorized,
     #[display("Internal server error")]
     InternalServerError,
+    #[display("LLM Object Processing Error")]
+    LLMObjectProcessingError,
     #[display("Invalid input for field: {}", field)]
     InvalidInput { field: String },
 }
@@ -30,6 +32,7 @@ impl error::ResponseError for AppError {
             AppError::Unauthorized { .. } => StatusCode::UNAUTHORIZED,
             AppError::InternalServerError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::InvalidInput { .. } => StatusCode::BAD_REQUEST,
+            AppError::LLMObjectProcessingError {..} => StatusCode::INTERNAL_SERVER_ERROR
         }
     }
 
@@ -39,6 +42,9 @@ impl error::ResponseError for AppError {
         let details = match self {
             AppError::InvalidInput { field } => {
                 Some(format!("The field '{}' has an invalid value.", field))
+            },
+            AppError::LLMObjectProcessingError => {
+                Some(format!("Could not convert the user input into a API action"))
             }
             // Add more specific details for other error types if needed
             _ => None,
@@ -56,8 +62,8 @@ impl error::ResponseError for AppError {
     }
 }
 
-impl From<controller::error::GoogleControllerError> for AppError {
-    fn from(_err: controller::error::GoogleControllerError) -> Self {
+impl From<controller::errors::GoogleControllerError> for AppError {
+    fn from(_err: controller::errors::GoogleControllerError) -> Self {
         AppError::InternalServerError
     }
 }

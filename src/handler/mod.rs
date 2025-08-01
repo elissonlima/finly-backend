@@ -1,7 +1,8 @@
 mod auth;
 mod chat;
-mod error;
+pub mod errors;
 mod macros;
+mod llm_generic_processor;
 
 pub use auth::google_signin;
 pub use auth::refresh_token;

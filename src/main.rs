@@ -29,7 +29,7 @@ async fn main() -> std::io::Result<()> {
 
     // Log Configuration
     env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
+        .filter_level(log::LevelFilter::Debug)
         .init();
     log::info!("Starting finly-backend");
 
