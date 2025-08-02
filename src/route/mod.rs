@@ -17,3 +17,14 @@ pub fn chat(cfg: &mut web::ServiceConfig) {
             .route("/send", web::post().to(handler::message_recv)),
     );
 }
+
+pub fn category(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::scope("/cat")
+            .wrap(from_fn(middleware::auth_middleware))
+            .route("", web::get().to(handler::list_categories)),
+    );
+}
+
+
+

@@ -85,6 +85,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(Compress::default())
             .configure(route::auth)
             .configure(route::chat)
+            .configure(route::category)
     };
 
     HttpServer::new(app)
