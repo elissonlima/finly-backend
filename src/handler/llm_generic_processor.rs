@@ -17,22 +17,37 @@ impl<'a> LLMGenericProcessor<'a> {
         LLMGenericProcessor { db_conn, generated_object, user_id }
     }
 
+    async fn process_create_category(&self) -> Result<serde_json::Value, AppError> {
+        let category_controller = CategoryController::new(self.db_conn, self.user_id);
+        let icon_id = 1;
+
+        let color = match category_controller.get_random_category_color().await {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("It wasn't possible to get random color number for new category: {}", e);
+                String::from("#E53E3E")
+            }
+        };
+
+        let cat = match category_controller.create(&self.generated_object.description, &icon_id, &color).await {
+            Ok(c) => c,
+            Err(e) => {
+                log::error!("Error trying to create a category from this LLM Object:{:?}, Error: {}", 
+                    self.generated_object,
+                    e
+                );
+                return Err(AppError::LLMObjectProcessingError)
+            }
+        };
+
+        Ok(json!(cat))
+    }
+
     async fn process_create(&self) -> Result<HttpResponse, AppError> {
 
         let response_body = match self.generated_object.object {
             ObjectType::Category => {
-                let category_controller = CategoryController::new(self.db_conn, self.user_id);
-                let cat = match category_controller.create(&self.generated_object.description).await {
-                    Ok(c) => c,
-                    Err(e) => {
-                        log::error!("Error trying to create a category from this LLM Object:{:?}, Error: {}", 
-                            self.generated_object,
-                            e
-                        );
-                        return Err(AppError::LLMObjectProcessingError)
-                    }
-                };
-                json!(cat)
+                self.process_create_category().await?
             },
             ObjectType::CreditCard => {
                 let credit_card_controller = CreditCardController::new(self.db_conn, self.user_id);

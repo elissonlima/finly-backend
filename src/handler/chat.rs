@@ -34,7 +34,8 @@ pub async fn message_recv(
 
     let llm_res = match controller::exec_prompt(
         &body.msg,
-        &service_token
+        &service_token,
+        controller::PromptCase::UserInputToJson
     ).await {
         Ok(l) => l.unwrap_or_default(),
         Err(e) => {
@@ -66,8 +67,8 @@ pub async fn message_recv(
     let llm_processor = LLMGenericProcessor::new(
         &app_state.pool, 
         &llm_response_object, 
-        user_id);
-    
+        user_id
+    );
 
     return llm_processor.process().await;
 }

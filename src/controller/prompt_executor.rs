@@ -61,10 +61,11 @@ pub async fn get_access_token(
 
 pub async fn exec_prompt(
     user_text: &str,
-    service_token: &GoogleServiceToken
+    service_token: &GoogleServiceToken,
+    prompt_case: PromptCase
 ) -> Result<Option<Vec<LLMResponse>>, GoogleControllerError> {
-    let prompt_text = build_prompt(user_text);
-    let system_instructions = get_system_instructions();
+    let prompt_text = build_prompt(user_text, &prompt_case);
+    let system_instructions = get_system_instructions(&prompt_case);
 
     let client = reqwest::Client::new();
     let url = format!(
@@ -75,6 +76,7 @@ pub async fn exec_prompt(
         model_id = MODEL_ID,
         generate_content_api = GENERATE_CONTENT_API
     );
+    let response_schema = get_response_schema(&prompt_case);
     let response = client
         .post(url)
         .header("Authorization", format!("Bearer {}", service_token.access_token))
@@ -102,7 +104,7 @@ pub async fn exec_prompt(
                         "thinkingBudget": -1
                     },
                     "responseMimeType": "application/json",
-                    "responseSchema": {"type":"OBJECT","properties":{"command":{"type":"STRING"},"object":{"type":"STRING"},"description":{"type":"STRING"},"value":{"type":"INTEGER"},"category":{"type":"STRING"},"credit_card":{"type":"STRING"},"period":{"type":"STRING"},"frequency":{"type":"STRING"}},"required":["command","object","description"]}
+                    "responseSchema": response_schema
                 },
                 "safetySettings": [
                     {
@@ -118,7 +120,7 @@ pub async fn exec_prompt(
                         "threshold": "OFF"
                     },
                     {
-                        "category":"HARM_CATEGORY_HARASSMENT",
+                        "category":"HARM_ATEGORY_HARASSMENT",
                         "threshold": "OFF"
                     },
                 ]
@@ -138,16 +140,40 @@ pub async fn exec_prompt(
     Ok(Some(response_text))
 }
 
-fn get_system_instructions() -> String {
-    String::from(
-        "You are an AI assistant designed to translate Portuguese sentences into JSON objects for a personal expense management application. Your primary task is to accurately interpret the user's input and format it into a structured JSON object that can be easily processed by the application.",
-    )
+pub enum PromptCase {
+    UserInputToJson,
+    CategoryIconExtract(String)
 }
 
-fn build_prompt(user_text: &str) -> String {
-    let prompt_text = format!(
+fn get_response_schema(prompt_case: &PromptCase) -> serde_json::Value {
+    match prompt_case {
+        PromptCase::UserInputToJson => json!({"type":"OBJECT","properties":{"command":{"type":"STRING"},"object":{"type":"STRING"},"description":{"type":"STRING"},"value":{"type":"INTEGER"},"category":{"type":"STRING"},"credit_card":{"type":"STRING"},"period":{"type":"STRING"},"frequency":{"type":"STRING"}},"required":["command","object","description"]}),
+        PromptCase::CategoryIconExtract(_) => json!({"type":"OBJECT","properties":{"icon_name":{"type":"STRING"}},"required":["icon_name"]})
+    }
+}
+
+fn get_system_instructions(prompt_case: &PromptCase) -> String {
+
+    match prompt_case {
+        PromptCase::UserInputToJson => String::from(
+            "You are an AI assistant designed to translate Portuguese sentences into JSON objects for a personal expense management application. Your primary task is to accurately interpret the user's input and format it into a structured JSON object that can be easily processed by the application.",
+        ),
+        PromptCase::CategoryIconExtract(_) => String::from(
+            "You are an expert in understanding expense categories and matching them to appropriate icons. Your task is to analyze a user-provided expense category description in Portuguese and select the most appropriate icon from a given list."
+        )
+    }
+}
+
+fn build_prompt(user_text: &str, prompt_case: &PromptCase) -> String {
+    let prompt_text = match prompt_case {
+        PromptCase::CategoryIconExtract(i_list) => format!("You will be provided with an expense category description in Portuguese and a list of available icons.\n\nExpense category description (Portuguese): {expense_category_description}\nAvailable icons: {icon_list}\n\nFollow these steps:\n1. Analyze the expense category description to understand its meaning and purpose.\n2. Compare the expense category to each icon in the list to determine the best match.\n3. Output the name of the selected icon in JSON format.\n\nExample output:\n{{\"icon_name\": \"home\"}}",
+            expense_category_description = user_text,
+            icon_list = i_list
+        ),
+        PromptCase::UserInputToJson => format!(
         "You will be provided with a Portuguese sentence:\n{portuguese_sentence}\n\nYour task is to translate the given Portuguese sentence into a JSON object. The JSON object should have the following structure:\n\n*   **command:** This field indicates the action to be performed. It can be either \"CREATE\" or \"LIST\".\n*   **object:** This field specifies the type of object being referred to in the sentence. It can be \"EXPENSE\", \"CREDIT CARD\", \"INCOME\", or \"CATEGORY\".\n*   **Other fields:** Depending on the \"Object\", include the necessary fields to describe the object.\n\nHere are the guidelines for determining the values of each field:\n\n*   **command:**\n    *   If the sentence indicates the creation of a new expense, income, or category, set the value to \"CREATE\".\n    *   If the sentence requests a list of existing expenses, incomes, or categories, set the value to \"LIST\".\n*   **object:**\n    *   If the sentence refers to an expense, set the value to \"EXPENSE\".\n    *   If the sentence refers to an income, set the value to \"INCOME\".\n    *   If the sentence refers to a category, set the value to \"CATEGORY\".\n    *   If the sentence refers to a credit card, set the value to \"CREDIT_CARD\".\n*   **other fields:**\n    *   For \"EXPENSE\", include fields such as \"description\", \"value\", \"category\", \"credit_card\", \"period\", and \"frequency\". \n    *   For \"INCOME\", include fields such as \"description\", \"value\", and \"date\".\n    *   For \"CATEGORY\" and \"CREDIT_CARD\", include fields such as \"name\" and \"description\".\n*    **constraints:**\n    *   If no clear description is provided, the \"description\" value should be the Portuguese word for the object\n    *   For date ranges, set the period as English labels (TODAY, YESTERDAY, THIS_WEEK, THIS_MONTH, PAST_3_MONTHS, LAST_YEAR, PAST_11_DAYS) rather than actual date intervals.\n    *   The \"frequency\" on the EXPENSE object refers to how often this expense repeats. Translate this to a label in plain English like (EVERY_MONTH,  EVERY_YEAR, EVERY_QUARTER, EVERY_SEMESTER, etc). If no clear frequency is provided it must be assign as ONCE.\n    *   If no clear category name is found on the EXPENSE input sentence, the category field must be set as NO_CATEGORY.\n    *   If the sentence refers to a EXPENSE using a credit card, but no clear credit card name is defined, set the credit_card field to DEFAULT.\n\nExample:\n\nInput: \"Crie uma despesa de R$50 com alimentação para amanhã.\"\n\nOutput:\n\n```json\n{{\n  \"command\": \"CREATE\",\n  \"object\": \"EXPENSE\",\n  \"description\": \"alimentação\",\n  \"value\": 50.00,\n  \"category\": \"alimentação\",\n  \"period\": \"TOMORROW\"\n}}\n```\n\nIf the input sentence is unclear or does not fit the expected format, return an error message in JSON format:\n\n```json\n{{\n  \"error\": \"Unable to parse the sentence. Please provide a clearer instruction.\"\n}}\n```",
         portuguese_sentence = user_text
-    );
+     )
+    };
     return prompt_text;
 }
