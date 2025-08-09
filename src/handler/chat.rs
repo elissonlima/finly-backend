@@ -3,11 +3,10 @@ use actix_web::{
     web
 };
 use serde::{Deserialize};
-use std::fmt::Write;
-
+use serde_json::json;
 use crate::{
-    app_state, controller::{self, get_access_token, is_google_access_token_expired},
-    handler::{errors::AppError, llm_generic_processor::LLMGenericProcessor, macros}, model::LLMGeneratedResponse,
+    app_state, controller::{get_access_token, is_google_access_token_expired, LLMCategoryProcessor, LLMController},
+    handler::{errors::AppError, macros}, model::ObjectType,
 };
 
 #[derive(Deserialize)]
@@ -23,8 +22,14 @@ pub async fn message_recv(
     let ext = req.extensions();
     let user_id = macros::get_user_id!(ext);
 
-    let mut service_token = app_state.google_service_token.lock().unwrap();
-    log::info!("Current expiration: {}; Is expired? {}", service_token.expires_at, is_google_access_token_expired(&service_token));
+    let mut service_token = match app_state.google_service_token.lock(){
+        Ok(s) => s,
+        Err(e) => {
+            log::error!("Could not get Google Service Token from App State: {}", e);
+            return Err(AppError::InternalServerError)
+        }
+    };
+
     if is_google_access_token_expired(&service_token) {
         let n_token =  get_access_token(&app_state.google_service_key).await?;
         service_token.access_token = n_token.access_token;
@@ -32,43 +37,46 @@ pub async fn message_recv(
         service_token.token_type = n_token.token_type;
     }
 
-    let llm_res = match controller::exec_prompt(
-        &body.msg,
-        &service_token,
-        controller::PromptCase::UserInputToJson
-    ).await {
-        Ok(l) => l.unwrap_or_default(),
-        Err(e) => {
-            log::error!("An error occurred while trying to reach google API: {}", e);
-            return Err(AppError::InternalServerError);
-        }
+
+    let llm_controller = LLMController::new(&service_token);
+    let llm_response = match llm_controller.exec_usr_json(&body.msg).await {
+            Ok(l) => l,
+            Err(e) => {
+                log::error!("Could not execute user prompt: {}", e);
+                return Err(AppError::InternalServerError)
+            }
     };
 
-    let mut llm_built_json = String::new();
-    for res in llm_res {
-        for candidate in res.candidates {
-            for part in candidate.content.parts {
-                match write!(&mut llm_built_json, "{}", part.text) {
-                    Ok(()) => {}
-                    Err(_) => return Err(AppError::InternalServerError),
+    
+    let res = match llm_response.object {
+        ObjectType::Category => {
+            let llm_category_processor = LLMCategoryProcessor::new(
+                &app_state.pool,
+                user_id,
+                &service_token,
+                &body.msg
+            );
+            match llm_category_processor.process(&llm_response).await {
+                Ok(c) => {
+                    c
+                },
+                Err(e) => {
+                    log::error!("Could not process LLM Generated Response: {}", e);
+                    return Err(AppError::InternalServerError);
                 }
             }
-        }
-    }
-
-    let llm_response_object: LLMGeneratedResponse = match serde_json::from_str(&llm_built_json){
-        Ok(e) => e,
-        Err(e) => {
-            log::error!("Could not serialize LLM Generated Response: {}", e);
-            return Err(AppError::InternalServerError); 
-        }
+        },
+        ObjectType::CreditCard => {
+            json!({"message": "Not implemented"})
+        },
+        ObjectType::Expense => {
+            json!({"message": "Not implemented"})
+        },
     };
 
-    let llm_processor = LLMGenericProcessor::new(
-        &app_state.pool, 
-        &llm_response_object, 
-        user_id
-    );
-
-    return llm_processor.process().await;
+    Ok(HttpResponse::Ok().body(json!({
+        "object": &llm_response.object,
+        "command": &llm_response.command,
+        "res": res
+    }).to_string()))
 }

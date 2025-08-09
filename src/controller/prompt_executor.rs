@@ -120,7 +120,7 @@ pub async fn exec_prompt(
                         "threshold": "OFF"
                     },
                     {
-                        "category":"HARM_ATEGORY_HARASSMENT",
+                        "category":"HARM_CATEGORY_HARASSMENT",
                         "threshold": "OFF"
                     },
                 ]

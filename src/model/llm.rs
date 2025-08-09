@@ -27,3 +27,10 @@ pub struct LLMGeneratedResponse {
     pub period: Option<String>,
     pub frequency: Option<String>
 }
+
+
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LLMCategoryIconResponse {
+    pub icon_name: String
+}

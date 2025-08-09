@@ -16,5 +16,6 @@ pub use google_api::GoogleServiceTokenApiResponse;
 pub use llm::LLMGeneratedResponse;
 pub use llm::CommandType;
 pub use llm::ObjectType;
-pub use category::Category;
+pub use llm::LLMCategoryIconResponse;
+pub use category::{Category, CategoryIcon};
 pub use credit_card::CreditCard;
