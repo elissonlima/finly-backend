@@ -3,6 +3,7 @@ mod category;
 mod google_api;
 mod llm;
 mod user;
+mod icon;
 mod credit_card;
 
 pub use account::Account;
@@ -19,3 +20,4 @@ pub use llm::ObjectType;
 pub use llm::LLMCategoryIconResponse;
 pub use category::{Category, CategoryIcon};
 pub use credit_card::CreditCard;
+pub use icon::XmlIcon;

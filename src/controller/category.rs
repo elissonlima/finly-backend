@@ -1,7 +1,7 @@
 use rand::seq::IndexedRandom;
 use sqlx::PgPool;
 
-use crate::model::{Category, CategoryIcon};
+use crate::model::{Category, CategoryIcon, XmlIcon};
 
 pub struct CategoryController<'a> {
     db_conn: &'a PgPool,
@@ -129,6 +129,56 @@ impl<'a> CategoryController<'a> {
         .await?;
 
         Ok(rec)
+    }
+
+    pub async fn list_category_icons(&self) -> Result<Vec<XmlIcon>, sqlx::Error> {
+        let rec = sqlx::query_as!(
+            XmlIcon,
+            r#"
+                SELECT
+                    id,
+                    xml
+                FROM "xml_icon" x
+                WHERE x.class = 'CATEGORY';
+            "#
+        )
+        .fetch_all(self.db_conn)
+        .await?;
+
+        Ok(rec)
+    }
+
+    pub async fn list_category_icons_id(&self) -> Result<Vec<i32>, sqlx::Error> {
+        let rec = sqlx::query!(
+            r#"
+                SELECT
+                    id
+                FROM "xml_icon" x
+                WHERE x.class = 'CATEGORY';
+            "#
+        )
+        .fetch_all(self.db_conn)
+        .await?;
+
+        let res = rec.iter().map(|i| i.id).collect();
+
+        Ok(res)
+    }
+
+    pub async fn list_category_colors(&self) -> Result<Vec<String>, sqlx::Error> {
+        let rec = sqlx::query!(
+            r#"
+                SELECT
+                    color_hex
+                FROM "category_possible_colors";
+            "#
+        )
+        .fetch_all(self.db_conn)
+        .await?;
+
+        let res = rec.iter().map(|c| c.color_hex.clone()).collect();
+
+        Ok(res)
     }
 
 }

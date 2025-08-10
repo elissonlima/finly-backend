@@ -22,7 +22,10 @@ pub fn category(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/cat")
             .wrap(from_fn(middleware::auth_middleware))
-            .route("", web::get().to(handler::list_categories)),
+            .route("", web::get().to(handler::list_categories))
+            .route("/icons", web::get().to(handler::list_category_icons))
+            .route("/colors", web::get().to(handler::list_category_colors))
+            .route("", web::post().to(handler::create_category))
     );
 }
 

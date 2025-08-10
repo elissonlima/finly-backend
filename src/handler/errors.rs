@@ -15,6 +15,8 @@ pub enum AppError {
     LLMObjectProcessingError,
     #[display("Invalid input for field: {}", field)]
     InvalidInput { field: String },
+    #[display("Bad Request")]
+    BadRequest,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,7 +34,8 @@ impl error::ResponseError for AppError {
             AppError::Unauthorized { .. } => StatusCode::UNAUTHORIZED,
             AppError::InternalServerError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::InvalidInput { .. } => StatusCode::BAD_REQUEST,
-            AppError::LLMObjectProcessingError {..} => StatusCode::INTERNAL_SERVER_ERROR
+            AppError::LLMObjectProcessingError {..} => StatusCode::INTERNAL_SERVER_ERROR,
+            AppError::BadRequest => StatusCode::BAD_REQUEST
         }
     }
 
