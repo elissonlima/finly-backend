@@ -121,7 +121,7 @@ impl<'a> CategoryController<'a> {
                 FROM "category" c
                 INNER JOIN "xml_icon" x
                     ON x.id = c.icon_id
-                WHERE user_id = $1;
+                WHERE user_id = $1 and is_active = true;
             "#,
             self.user_id
         )
@@ -165,6 +165,39 @@ impl<'a> CategoryController<'a> {
         Ok(res)
     }
 
+    pub async fn update(&self, category_id: &i32, name: &str, icon_id: &i32, color: &str) -> Result<Category, sqlx::Error> {
+        let rec = sqlx::query!(
+            r#"
+                UPDATE  "category"
+                SET name = $1,
+                    icon_id = $2,
+                    color  = $3,
+                    updated_at = now()
+                WHERE id = $4 AND user_id = $5
+                RETURNING id, created_at, updated_at;
+            "#,
+            name,
+            icon_id,
+            color,
+            category_id,
+            self.user_id
+        )
+        .fetch_one(self.db_conn)
+        .await?;
+
+        let cat = Category {
+            id: rec.id,
+            user_id: *self.user_id,
+            name: String::from(name),
+            icon_id: *icon_id,
+            color: String::from(color),
+            created_at: rec.created_at,
+            updated_at: rec.updated_at,
+        };
+
+        return Ok(cat);
+    }
+
     pub async fn list_category_colors(&self) -> Result<Vec<String>, sqlx::Error> {
         let rec = sqlx::query!(
             r#"
@@ -179,6 +212,23 @@ impl<'a> CategoryController<'a> {
         let res = rec.iter().map(|c| c.color_hex.clone()).collect();
 
         Ok(res)
+    }
+
+    pub async fn delete(&self, category_id: &i32) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            r#"
+                UPDATE  "category"
+                SET is_active = false,
+                    updated_at = now()
+                WHERE id = $1 AND user_id = $2;
+            "#,
+            category_id,
+            self.user_id
+        )
+        .execute(self.db_conn)
+        .await?;
+    
+        Ok(())
     }
 
 }

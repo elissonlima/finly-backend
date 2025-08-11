@@ -26,6 +26,8 @@ pub fn category(cfg: &mut web::ServiceConfig) {
             .route("/icons", web::get().to(handler::list_category_icons))
             .route("/colors", web::get().to(handler::list_category_colors))
             .route("", web::post().to(handler::create_category))
+            .route("", web::patch().to(handler::update_category))
+            .route("", web::delete().to(handler::delete_category))
     );
 }
 

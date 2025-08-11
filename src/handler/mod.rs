@@ -11,3 +11,5 @@ pub use category::list_categories;
 pub use category::list_category_icons;
 pub use category::list_category_colors;
 pub use category::create_category;
+pub use category::update_category;
+pub use category::delete_category;
