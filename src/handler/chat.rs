@@ -77,6 +77,6 @@ pub async fn message_recv(
     Ok(HttpResponse::Ok().body(json!({
         "object": &llm_response.object,
         "command": &llm_response.command,
-        "res": res
+        "res": json!(res).to_string()
     }).to_string()))
 }

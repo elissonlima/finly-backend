@@ -13,18 +13,17 @@ impl<'a> CategoryController<'a> {
         CategoryController { db_conn, user_id }
     }
 
-    pub async fn get_category_icons(&self) -> Result<Vec<String>, sqlx::Error> {
-        let rec = sqlx::query!(
+    pub async fn get_category_icons(&self) -> Result<Vec<XmlIcon>, sqlx::Error> {
+        let rec = sqlx::query_as!(
+            XmlIcon,
             r#"
-                SELECT name FROM xml_icon WHERE "class" = 'CATEGORY';
+                SELECT id, name, xml FROM xml_icon WHERE "class" = 'CATEGORY';
             "#
         )
         .fetch_all(self.db_conn)
         .await?;
 
-        let res = rec.iter().map(|s| s.name.clone()).collect();
-
-        Ok(res)   
+        Ok(rec)   
     }
 
     pub async fn get_random_category_color(&self) -> Result<String, sqlx::Error> {
@@ -137,6 +136,7 @@ impl<'a> CategoryController<'a> {
             r#"
                 SELECT
                     id,
+                    name,
                     xml
                 FROM "xml_icon" x
                 WHERE x.class = 'CATEGORY';
