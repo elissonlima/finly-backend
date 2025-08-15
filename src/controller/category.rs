@@ -29,7 +29,7 @@ impl<'a> CategoryController<'a> {
     pub async fn get_random_category_color(&self) -> Result<String, sqlx::Error> {
         let rec = sqlx::query!(
             r#"
-                SELECT color_hex FROM category_possible_colors;
+                SELECT color_hex FROM colors;
             "#
         )
         .fetch_all(self.db_conn)
@@ -203,7 +203,7 @@ impl<'a> CategoryController<'a> {
             r#"
                 SELECT
                     color_hex
-                FROM "category_possible_colors";
+                FROM "colors";
             "#
         )
         .fetch_all(self.db_conn)

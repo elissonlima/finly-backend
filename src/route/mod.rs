@@ -31,5 +31,12 @@ pub fn category(cfg: &mut web::ServiceConfig) {
     );
 }
 
-
+pub fn credit_card(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::scope("/card")
+        .wrap(from_fn(middleware::auth_middleware))
+        .route("", web::get().to(handler::list_credit_card))
+        .route("", web::post().to(handler::create_credit_card))
+    );
+}
 

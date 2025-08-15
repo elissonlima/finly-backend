@@ -86,6 +86,7 @@ async fn main() -> std::io::Result<()> {
             .configure(route::auth)
             .configure(route::chat)
             .configure(route::category)
+            .configure(route::credit_card)
     };
 
     HttpServer::new(app)
